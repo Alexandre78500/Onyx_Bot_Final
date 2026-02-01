@@ -9,12 +9,19 @@ from typing import Any, Dict, List, Optional, Set
 from discord import Reaction, User
 from discord.ext import commands, tasks
 
+from bot.constants import (
+    ANALYTICS_ARCHIVE_BUFFER_SIZE,
+    ANALYTICS_MESSAGE_CACHE_SIZE,
+    ANALYTICS_MESSAGE_CACHE_TTL_SECONDS,
+    ANALYTICS_SAVE_INTERVAL_MINUTES,
+)
+
 # Configuration
 ANALYTICS_FILE = "data/analytics_v1.json"
 ARCHIVE_FILE = "data/messages_archive_v1.jsonl"
 CONFIG_FILE = "data/analytics_config.json"
-SAVE_INTERVAL_MINUTES = 5
-ARCHIVE_BUFFER_SIZE = 100
+SAVE_INTERVAL_MINUTES = ANALYTICS_SAVE_INTERVAL_MINUTES
+ARCHIVE_BUFFER_SIZE = ANALYTICS_ARCHIVE_BUFFER_SIZE
 
 # Mots courants à exclure du word count
 COMMON_WORDS = {
@@ -30,8 +37,8 @@ COMMON_WORDS = {
 }
 
 # Cache pour conversations: garde les 20 derniers messages par canal (max 10 min)
-MESSAGE_CACHE_SIZE = 20
-MESSAGE_CACHE_TTL_SECONDS = 600  # 10 minutes
+MESSAGE_CACHE_SIZE = ANALYTICS_MESSAGE_CACHE_SIZE
+MESSAGE_CACHE_TTL_SECONDS = ANALYTICS_MESSAGE_CACHE_TTL_SECONDS
 
 CURRENT_SCHEMA_VERSION = 1
 logger = logging.getLogger(__name__)

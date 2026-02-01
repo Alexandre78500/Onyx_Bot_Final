@@ -9,15 +9,17 @@ from typing import Dict, Tuple
 import pytz
 from discord.ext import commands, tasks
 
+from bot.constants import GM_RESET_TIME, GM_SAVE_INTERVAL_SECONDS
+
 # Fuseau horaire France
 PARIS_TZ = pytz.timezone('Europe/Paris')
 
 # Heure de reset (5h30 du matin)
-RESET_TIME = time(5, 30)
+RESET_TIME = GM_RESET_TIME
 
 # Fichier de sauvegarde
 DATA_FILE = "gm_data.json"
-SAVE_INTERVAL_SECONDS = 60  # Sauvegarde toutes les 60s max
+SAVE_INTERVAL_SECONDS = GM_SAVE_INTERVAL_SECONDS  # Sauvegarde toutes les 60s max
 
 # Réponses personnalisées avec placeholder {pseudo}
 GM_RESPONSES = [

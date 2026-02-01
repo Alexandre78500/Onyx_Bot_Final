@@ -4,23 +4,42 @@ import logging
 import os
 import random
 from datetime import datetime, timedelta
+from typing import TypedDict
 
 import pytz
 from discord import Embed
 from discord.ext import commands, tasks
 
+from bot.constants import (
+    ENGAGEMENT_COOLDOWN_SECONDS,
+    ENGAGEMENT_SAVE_INTERVAL_SECONDS,
+    XP_GM_BONUS as CONST_XP_GM_BONUS,
+    XP_PER_MESSAGE_MAX as CONST_XP_PER_MESSAGE_MAX,
+    XP_PER_MESSAGE_MIN as CONST_XP_PER_MESSAGE_MIN,
+)
+
 # Configuration
 PARIS_TZ = pytz.timezone('Europe/Paris')
 DATA_FILE = "engagement_data.json"
-COOLDOWN_SECONDS = 15  # Anti-spam: 15 secondes entre chaque comptabilisation
-SAVE_INTERVAL_SECONDS = 60  # Sauvegarde toutes les 60s max
+COOLDOWN_SECONDS = ENGAGEMENT_COOLDOWN_SECONDS  # Anti-spam: 15 secondes entre chaque comptabilisation
+SAVE_INTERVAL_SECONDS = ENGAGEMENT_SAVE_INTERVAL_SECONDS  # Sauvegarde toutes les 60s max
 
 # Gains d'XP
-XP_PER_MESSAGE_MIN = 5
-XP_PER_MESSAGE_MAX = 15
-XP_GM_BONUS = 50
+XP_PER_MESSAGE_MIN = CONST_XP_PER_MESSAGE_MIN
+XP_PER_MESSAGE_MAX = CONST_XP_PER_MESSAGE_MAX
+XP_GM_BONUS = CONST_XP_GM_BONUS
 
 logger = logging.getLogger(__name__)
+
+
+class EngagementUser(TypedDict):
+    xp: int
+    weekly_xp: int
+    messages: int
+    last_active: str | None
+    display_name: str | None
+    streak_days: int
+    last_streak_date: str | None
 
 
 def calculate_level(xp):
@@ -168,7 +187,7 @@ class EngagementCog(commands.Cog):
         self.cooldowns[cooldown_key] = now
         return True
     
-    def _add_xp(self, guild_id: int, user_id: int, xp_amount: int, user_name: str | None = None, is_weekly: bool = True):
+    def _add_xp(self, guild_id: int, user_id: int, xp_amount: int, user_name: str | None = None, is_weekly: bool = True) -> tuple[EngagementUser, int, int]:
         """Ajoute de l'XP à un utilisateur dans un serveur spécifique."""
         guild_data = self._get_guild_data(guild_id)
         user_id_str = str(user_id)
@@ -184,7 +203,7 @@ class EngagementCog(commands.Cog):
                 "last_streak_date": None
             }
         
-        user_data = guild_data["users"][user_id_str]
+        user_data: EngagementUser = guild_data["users"][user_id_str]
         
         # Calculer le niveau avant l'ajout d'XP
         old_level = calculate_level(user_data["xp"])
@@ -208,7 +227,7 @@ class EngagementCog(commands.Cog):
         
         return user_data, old_level, new_level
     
-    def _update_streak(self, user_data: dict):
+    def _update_streak(self, user_data: EngagementUser):
         """Met à jour le streak journalier de l'utilisateur."""
         now = self._get_paris_now()
         today = now.date()

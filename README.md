@@ -31,7 +31,7 @@ Bot Discord complet avec système de rêves lucides, engagement utilisateur et a
 ### 🤖 Features Automatiques
 - **GM** : Réponds "gm" pour recevoir un message personnalisé (1x/jour par serveur)
 - **Réactions auto** : Le bot réagit avec `:hap:` et `:noel:` quand ces emojis sont utilisés
-- **Suggestions de commandes** : Si tu fais une faute (ex: `o!classsement`), le bot suggère la bonne commande
+- **Suggestions de commandes** : Si tu fais une faute (ex: `o!classsement`), le bot suggère la bonne commande (liste auto)
 
 ### 📈 Analytics Complètes
 Collecte automatique à chaque message :
@@ -52,6 +52,7 @@ bot/
 ├── __init__.py
 ├── main.py                 # Point d'entrée, chargement des cogs
 ├── config.py              # Configuration environnement
+├── constants.py            # Constantes centralisées (timers, XP, seuils)
 └── cogs/
     ├── __init__.py
     ├── analytics.py       # 📈 Cog analytics (collecte données)
@@ -77,6 +78,10 @@ gm_data.json             # Données GM par serveur
 - Cogs chargés automatiquement dans `main.py:setup_hook()`
 - Gestion des événements via `@commands.Cog.listener()`
 - Commandes préfixées uniquement (`o!`) pour l'instant
+
+### Constantes centralisées
+- Les timers (save/reset), XP, cooldowns et tailles de cache sont regroupés dans `bot/constants.py`
+- Modifier ces valeurs ici évite de chercher dans plusieurs fichiers
 
 ### Gestion des données
 - **Format** : JSON pour les stats, JSONL pour l'archive
