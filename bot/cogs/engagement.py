@@ -4,13 +4,11 @@ import logging
 import os
 import random
 from datetime import datetime, timedelta
-from io import BytesIO
 from typing import TypedDict
 
 import pytz
-from discord import Embed, File
+from discord import Embed
 from discord.ext import commands, tasks
-from PIL import Image, ImageDraw, ImageFont
 
 from bot.constants import (
     ENGAGEMENT_COOLDOWN_SECONDS,
@@ -230,7 +228,7 @@ class EngagementCog(commands.Cog):
         return user_data, old_level, new_level
 
     def _get_analytics_snapshot(self, guild_id: int, user_id: int) -> dict:
-        """Retourne les donnees analytics utiles pour la carte profil."""
+        """Retourne les donnees analytics utiles pour l'embed profil."""
         analytics = self.bot.get_cog("AnalyticsCog")
         if not analytics:
             return {}
@@ -253,182 +251,98 @@ class EngagementCog(commands.Cog):
             "segments": segments,
         }
 
-    async def _build_profile_card(self, user, user_data: EngagementUser, analytics_data: dict) -> BytesIO:
-        """Genere une carte profil PNG compacte et sobre."""
-        # Dimensions compactes
-        width, height = 800, 280
-        
-        # Fond sombre uni et sobre
-        image = Image.new("RGB", (width, height), (26, 28, 44))
-        draw = ImageDraw.Draw(image)
-        
-        # Gradient vertical subtil
-        for y in range(height):
-            factor = y / height
-            r = int(26 + 8 * factor)
-            g = int(28 + 8 * factor)
-            b = int(44 + 12 * factor)
-            draw.line([(0, y), (width, y)], fill=(r, g, b))
-        
-        # Charger polices
-        try:
-            name_font = ImageFont.truetype("arial.ttf", 28)
-            level_font = ImageFont.truetype("arial.ttf", 22)
-            label_font = ImageFont.truetype("arial.ttf", 13)
-            value_font = ImageFont.truetype("arial.ttf", 16)
-            small_font = ImageFont.truetype("arial.ttf", 12)
-        except:
-            name_font = ImageFont.load_default()
-            level_font = ImageFont.load_default()
-            label_font = ImageFont.load_default()
-            value_font = ImageFont.load_default()
-            small_font = ImageFont.load_default()
-        
-        # Calculer stats
+    def _build_profile_embed(self, user, user_data: EngagementUser, analytics_data: dict, position: int) -> Embed:
+        """Genere un embed profil sobre et riche."""
         total_xp = user_data.get("xp", 0)
         weekly_xp = user_data.get("weekly_xp", 0)
+        messages = user_data.get("messages", 0)
         level = calculate_level(total_xp)
         progress, _ = get_level_progress(total_xp)
         streak_days = user_data.get("streak_days", 0)
-        
+
         # Analytics
         emoji_usage = analytics_data.get("emoji_usage", {})
         word_counts = analytics_data.get("word_counts", {})
         segments = analytics_data.get("segments", {})
-        
+
         top_emojis = sorted(emoji_usage.items(), key=lambda item: (-item[1], item[0]))[:3]
-        top_words = sorted(word_counts.items(), key=lambda item: (-item[1], item[0]))[:3]
-        
-        segment_labels = {"night": "Nuit", "morning": "Matin", "afternoon": "Apres-midi", "evening": "Soir"}
-        segment_icons = {"night": "🌙", "morning": "☀️", "afternoon": "🌤️", "evening": "🌆"}
-        
-        dominant_label = "N/A"
-        dominant_icon = ""
+        top_words = sorted(word_counts.items(), key=lambda item: (-item[1], item[0]))[:5]
+
+        segment_labels = {"night": "Nuit 🌙", "morning": "Matin ☀️", "afternoon": "Après-midi 🌤️", "evening": "Soir 🌆"}
+        dominant_segment = ""
         if segments:
-            dominant_segment = max(segments.items(), key=lambda x: x[1])[0]
-            dominant_label = segment_labels.get(dominant_segment, "N/A")
-            dominant_icon = segment_icons.get(dominant_segment, "")
-        
-        # Panel principal
-        panel_margin = 16
-        draw.rounded_rectangle(
-            [(panel_margin, panel_margin), (width - panel_margin, height - panel_margin)],
-            radius=16,
-            fill=(35, 38, 58),
-            outline=(65, 70, 95),
-            width=2
-        )
-        
-        # --- SECTION GAUCHE: Avatar + Niveau ---
-        avatar_size = 100
-        avatar_x, avatar_y = 30, 30
-        
-        # Avatar
-        avatar_bytes = await user.display_avatar.read()
-        avatar = Image.open(BytesIO(avatar_bytes)).convert("RGBA").resize((avatar_size, avatar_size), Image.Resampling.LANCZOS)
-        mask = Image.new("L", (avatar_size, avatar_size), 0)
-        ImageDraw.Draw(mask).ellipse([(0, 0), (avatar_size, avatar_size)], fill=255)
-        
-        # Bordure avatar simple
-        border_color = (100, 180, 255)
-        draw.ellipse(
-            [(avatar_x - 3, avatar_y - 3), (avatar_x + avatar_size + 3, avatar_y + avatar_size + 3)],
-            outline=border_color,
-            width=3
-        )
-        
-        image.paste(avatar, (avatar_x, avatar_y), mask)
-        
-        # Badge niveau compact sous l'avatar
-        badge_y = avatar_y + avatar_size + 12
-        badge_w, badge_h = 100, 32
-        badge_x = avatar_x
-        
-        draw.rounded_rectangle(
-            [(badge_x, badge_y), (badge_x + badge_w, badge_y + badge_h)],
-            radius=16,
-            fill=(255, 200, 50),
-        )
-        
-        level_text = f"NIV {level}"
-        bbox = draw.textbbox((0, 0), level_text, font=level_font)
-        text_w = bbox[2] - bbox[0]
-        text_h = bbox[3] - bbox[1]
-        draw.text(
-            (badge_x + (badge_w - text_w) // 2, badge_y + (badge_h - text_h) // 2 - 2),
-            level_text,
-            font=level_font,
-            fill=(30, 30, 30)
-        )
-        
-        # --- SECTION DROITE: Info utilisateur ---
-        info_x = avatar_x + avatar_size + 24
-        info_y = 40
-        
-        # Nom
-        draw.text((info_x, info_y), user.display_name, font=name_font, fill=(255, 255, 255))
-        
-        # XP Total
-        info_y += 38
-        draw.text((info_x, info_y), f"{total_xp:,} XP Total", font=value_font, fill=(200, 210, 230))
-        
-        # XP Semaine
-        info_y += 24
-        draw.text((info_x, info_y), f"Cette semaine: {weekly_xp:,} XP", font=small_font, fill=(150, 160, 180))
-        
+            dominant_key = max(segments.items(), key=lambda x: x[1])[0]
+            dominant_segment = segment_labels.get(dominant_key, "N/A")
+
         # Barre de progression
-        info_y += 28
-        bar_w = 450
-        bar_h = 14
-        bar_x = info_x
-        
-        # Fond barre
-        draw.rounded_rectangle(
-            [(bar_x, info_y), (bar_x + bar_w, info_y + bar_h)],
-            radius=7,
-            fill=(50, 55, 75)
+        filled = int(progress / 10)
+        bar = "▰" * filled + "▱" * (10 - filled)
+
+        embed = Embed(
+            title=f"📊 Profil de {user.display_name}",
+            description="Statistiques personnelles",
+            color=0x5865F2
         )
-        
-        # Remplissage
-        fill_w = int(bar_w * (progress / 100))
-        if fill_w > 0:
-            draw.rounded_rectangle(
-                [(bar_x, info_y), (bar_x + max(fill_w, 14), info_y + bar_h)],
-                radius=7,
-                fill=(100, 180, 255)
+        embed.set_thumbnail(url=user.display_avatar.url)
+
+        # Niveau + XP
+        embed.add_field(
+            name="📈 Niveau & Progression",
+            value=f"**Niveau {level}**\n{bar} `{progress:.1f}%`",
+            inline=False
+        )
+
+        # XP
+        embed.add_field(
+            name="✨ Expérience",
+            value=f"**Total :** {total_xp:,} XP\n**Semaine :** {weekly_xp:,} XP",
+            inline=True
+        )
+
+        # Position + Messages
+        embed.add_field(
+            name="🏆 Classement",
+            value=f"**Position :** #{position}\n**Messages :** {messages:,}",
+            inline=True
+        )
+
+        # Streak
+        if streak_days > 0:
+            streak_icon = "🔥" if streak_days >= 7 else "⚡"
+            embed.add_field(
+                name=f"{streak_icon} Streak",
+                value=f"**{streak_days}** jour{'s' if streak_days > 1 else ''}",
+                inline=True
             )
-        
-        # Pourcentage
-        percent_text = f"{progress:.0f}%"
-        draw.text((bar_x + bar_w + 8, info_y - 1), percent_text, font=small_font, fill=(180, 190, 210))
-        
-        # --- SECTION BAS: Stats compactes ---
-        stats_y = info_y + 34
-        stat_spacing = 142
-        
-        stats = [
-            ("TOP EMOJIS", " ".join([e for e, _ in top_emojis]) if top_emojis else "—"),
-            ("STREAK", f"🔥 {streak_days}j"),
-            ("PERIODE", f"{dominant_icon} {dominant_label}"),
-            ("TOP MOTS", ", ".join([w for w, _ in top_words]) if top_words else "—"),
-        ]
-        
-        for i, (label, value) in enumerate(stats):
-            stat_x = info_x + i * stat_spacing
-            
-            # Label
-            draw.text((stat_x, stats_y), label, font=label_font, fill=(120, 130, 150))
-            
-            # Valeur (tronquer si trop long)
-            if len(value) > 12:
-                value = value[:10] + "..."
-            draw.text((stat_x, stats_y + 18), value, font=value_font, fill=(220, 230, 250))
-        
-        # Sauvegarder
-        output = BytesIO()
-        image.save(output, format="PNG", optimize=True, quality=95)
-        output.seek(0)
-        return output
+
+        # Top emojis
+        if top_emojis:
+            emojis_text = " ".join([f"{emoji} ({count})" for emoji, count in top_emojis])
+            embed.add_field(
+                name="😄 Top Emojis",
+                value=emojis_text,
+                inline=False
+            )
+
+        # Top mots
+        if top_words:
+            words_text = ", ".join([f"`{word}`" for word, _ in top_words])
+            embed.add_field(
+                name="💬 Mots Favoris",
+                value=words_text,
+                inline=False
+            )
+
+        # Tranche dominante
+        if dominant_segment:
+            embed.add_field(
+                name="🕐 Période d'Activité",
+                value=dominant_segment,
+                inline=False
+            )
+
+        embed.set_footer(text="Statistiques mises à jour en temps réel")
+        return embed
     
     def _update_streak(self, user_data: EngagementUser):
         """Met à jour le streak journalier de l'utilisateur."""
@@ -648,8 +562,17 @@ class EngagementCog(commands.Cog):
         
         user_data = guild_data["users"][user_id]
         analytics_data = self._get_analytics_snapshot(guild_id, int(user_id))
-        card = await self._build_profile_card(ctx.author, user_data, analytics_data)
-        await ctx.send(file=File(fp=card, filename="profil.png"))
+        
+        # Calculer position
+        all_users = sorted(
+            guild_data["users"].items(),
+            key=lambda x: x[1].get("xp", 0),
+            reverse=True
+        )
+        position = next((i for i, (uid, _) in enumerate(all_users) if uid == user_id), 0) + 1
+        
+        embed = self._build_profile_embed(ctx.author, user_data, analytics_data, position)
+        await ctx.send(embed=embed)
     
     @commands.command(name="classement", aliases=["ranking", "top", "leaderboard", "top10"])
     async def classement_prefix(self, ctx):

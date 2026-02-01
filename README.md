@@ -24,8 +24,8 @@ Bot Discord complet avec système de rêves lucides, engagement utilisateur et a
 - **Gain d'XP automatique** : 5-15 XP par message (cooldown 15s)
 - **Niveaux progressifs** : Algorithmes de niveau avec courbe d'XP croissante
 - **Félicitations automatiques** : Messages de félicitations quand on monte de niveau
-- **Carte profil** : `o!profil` genere une carte image (niveau, XP, emojis, mots, tranche)
-- **Classement** : `o!profil` (carte profil) et `o!classement` (top 10 serveur)
+- **Profil** : `o!profil` affiche un embed riche (niveau, XP, position, emojis, mots, tranche)
+- **Classement** : `o!classement` (top 10 serveur)
 - **Streak journalier** : Nombre de jours consécutifs d'activité
 - **Classement hebdomadaire** : Post automatique le dimanche à 20h
 
