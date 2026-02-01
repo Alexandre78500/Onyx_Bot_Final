@@ -1,5 +1,7 @@
-import re
+import logging
 from discord.ext import commands
+
+logger = logging.getLogger(__name__)
 
 
 class ReactionsCog(commands.Cog):
@@ -25,10 +27,6 @@ class ReactionsCog(commands.Cog):
         content_lower = message.content.lower()
         reactions_added = []
         
-        # Debug: afficher les emojis disponibles (à retirer après test)
-        # available_emojis = [e.name for e in message.guild.emojis]
-        # print(f"Emojis disponibles: {available_emojis}")
-        
         # Chercher :hap:
         if ":hap:" in content_lower:
             try:
@@ -42,9 +40,9 @@ class ReactionsCog(commands.Cog):
                 if hap_emoji:
                     await message.add_reaction(hap_emoji)
                     reactions_added.append("hap")
-                    print(f"[Reactions] Emoji :hap: ajouté au message {message.id}")
+                    logger.debug(f"[Reactions] Emoji :hap: ajouté au message {message.id}")
             except Exception as e:
-                print(f"[Reactions] Erreur lors de l'ajout de :hap: : {e}")
+                logger.debug(f"[Reactions] Erreur lors de l'ajout de :hap: : {e}")
         
         # Chercher :noel:
         if ":noel:" in content_lower:
@@ -59,9 +57,9 @@ class ReactionsCog(commands.Cog):
                 if noel_emoji:
                     await message.add_reaction(noel_emoji)
                     reactions_added.append("noel")
-                    print(f"[Reactions] Emoji :noel: ajouté au message {message.id}")
+                    logger.debug(f"[Reactions] Emoji :noel: ajouté au message {message.id}")
             except Exception as e:
-                print(f"[Reactions] Erreur lors de l'ajout de :noel: : {e}")
+                logger.debug(f"[Reactions] Erreur lors de l'ajout de :noel: : {e}")
 
 
 async def setup(bot: commands.Bot):

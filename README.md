@@ -37,7 +37,7 @@ Bot Discord complet avec système de rêves lucides, engagement utilisateur et a
 Collecte automatique à chaque message :
 - **Stats temporelles** : Messages par jour de la semaine (7 valeurs) et par heure (24 valeurs)
 - **Word count** : Top mots utilisés sur le serveur (exclut les mots communs)
-- **Graphe de conversations** : Qui répond à qui (détection automatique des réponses < 5 min)
+- **Graphe de conversations** : Qui répond à qui (réponses explicites si dispo, sinon messages < 5 min)
 - **Graphe de mentions** : Qui mentionne qui fréquemment
 - **Stats réactions** : Nombre total de réactions et par emoji
 - **Archive complète** : Tous les messages sauvegardés avec timestamp, auteur, contenu, mentions, etc.
@@ -80,9 +80,12 @@ gm_data.json             # Données GM par serveur
 
 ### Gestion des données
 - **Format** : JSON pour les stats, JSONL pour l'archive
-- **Persistance** : Sauvegarde automatique toutes les 5 minutes + au shutdown
+- **Persistance** :
+  - Analytics : sauvegarde toutes les 5 minutes + au shutdown
+  - Engagement / GM : sauvegarde toutes les 60s si données modifiées + au shutdown
 - **En mémoire** : Données chargées en RAM pour accès instantané
-- **Thread-safe** : Écritures async avec buffer
+- **I/O async** : Écritures via executor + buffer (évite de bloquer l'event loop)
+- **Tolérance** : Perte max ~60s en cas de crash brutal (données en buffer)
 
 ---
 
@@ -127,6 +130,7 @@ gm_data.json             # Données GM par serveur
 - `messages_by_hour[0-23]` : 00h à 23h
 - `conversations["userA_userB"]` : Nombre de réponses entre ces deux users
 - `word_counts` : Tous les mots (≥3 lettres, hors mots communs) avec leur fréquence
+- `_meta.guilds` : Optionnel (liste ou dict historique, non critique pour la migration)
 
 ### 2. `data/messages_archive_v1.jsonl`
 **Format** : JSON Lines (1 ligne = 1 message JSON)
@@ -397,7 +401,8 @@ def calculate_level(xp):
 ```
 
 **Détection conversation** (`analytics.py`) :
-- Regarde les 10 derniers messages
+- Priorité aux réponses explicites (reply Discord)
+- Sinon, utilise le cache des derniers messages du canal
 - Si réponse < 5 minutes à quelqu'un d'autre = conversation
 - Clé : `"userA_userB"` (trié alphabétiquement)
 

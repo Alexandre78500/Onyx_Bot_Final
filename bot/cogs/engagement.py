@@ -1,23 +1,26 @@
 import asyncio
 import json
+import logging
 import os
 import random
-from datetime import datetime, time, timedelta
-from difflib import get_close_matches
+from datetime import datetime, timedelta
 
 import pytz
-from discord import Embed, Object, app_commands
+from discord import Embed
 from discord.ext import commands, tasks
 
 # Configuration
 PARIS_TZ = pytz.timezone('Europe/Paris')
 DATA_FILE = "engagement_data.json"
 COOLDOWN_SECONDS = 15  # Anti-spam: 15 secondes entre chaque comptabilisation
+SAVE_INTERVAL_SECONDS = 60  # Sauvegarde toutes les 60s max
 
 # Gains d'XP
 XP_PER_MESSAGE_MIN = 5
 XP_PER_MESSAGE_MAX = 15
 XP_GM_BONUS = 50
+
+logger = logging.getLogger(__name__)
 
 
 def calculate_level(xp):
@@ -47,24 +50,34 @@ class EngagementCog(commands.Cog):
         self.bot = bot
         self.data = {"guilds": {}}  # Structure: {guild_id: {users: {}, weekly_reset: None, channel_id: None}}
         self.cooldowns = {}  # {(guild_id, user_id): last_message_time}
+        self._dirty = False  # Flag: True si données modifiées depuis dernière sauvegarde
         self._load_data()
+        self.periodic_save.start()  # Sauvegarde périodique
         self.weekly_ranking.start()
+    
+    def cog_unload(self):
+        self.periodic_save.cancel()
+        self.weekly_ranking.cancel()
+        # Sauvegarder à la fermeture
+        if self._dirty:
+            self._save_data_sync()
     
     def _get_guild_data(self, guild_id: int):
         """Récupère ou crée les données d'un serveur."""
         guild_id_str = str(guild_id)
         if guild_id_str not in self.data["guilds"]:
-            self.data["guilds"][guild_id_str] = {
+            guild_data = {
                 "users": {},
                 "weekly_reset": None,
                 "channel_id": None
             }
+            self.data["guilds"][guild_id_str] = guild_data
             # Initialiser le prochain reset
-            self._set_next_weekly_reset(guild_id)
-            self._save_data()
+            self._set_next_weekly_reset(guild_id, guild_data)
+            self._dirty = True
         return self.data["guilds"][guild_id_str]
     
-    def _set_next_weekly_reset(self, guild_id: int):
+    def _set_next_weekly_reset(self, guild_id: int, guild_data: dict | None = None):
         """Définit le prochain reset hebdomadaire (dimanche 20h) pour un serveur."""
         now = self._get_paris_now()
         # Trouver le prochain dimanche
@@ -75,11 +88,12 @@ class EngagementCog(commands.Cog):
         next_reset = now + timedelta(days=days_until_sunday)
         next_reset = next_reset.replace(hour=20, minute=0, second=0, microsecond=0)
         
-        guild_data = self._get_guild_data(guild_id)
+        if guild_data is None:
+            guild_data = self._get_guild_data(guild_id)
+        if guild_data is None:
+            return
         guild_data["weekly_reset"] = next_reset
-    
-    def cog_unload(self):
-        self.weekly_ranking.cancel()
+        self._dirty = True
     
     def _load_data(self):
         """Charge les données depuis le fichier JSON."""
@@ -89,7 +103,7 @@ class EngagementCog(commands.Cog):
                     loaded_data = json.load(f)
                     # Migration des anciennes données (global -> guilds)
                     if "users" in loaded_data and "guilds" not in loaded_data:
-                        print("Migration des données d'engagement vers le nouveau format...")
+                        logger.info("Migration des données d'engagement vers le nouveau format...")
                         self.data = {"guilds": {}}
                         # On met les anciennes données dans un guild "legacy" (sera ignoré)
                     else:
@@ -99,11 +113,11 @@ class EngagementCog(commands.Cog):
                             if guild_data.get("weekly_reset"):
                                 guild_data["weekly_reset"] = datetime.fromisoformat(guild_data["weekly_reset"])
             except Exception as e:
-                print(f"Erreur chargement engagement: {e}")
+                logger.error(f"Erreur chargement engagement: {e}")
                 self.data = {"guilds": {}}
     
-    def _save_data(self):
-        """Sauvegarde les données dans le fichier JSON."""
+    def _save_data_sync(self):
+        """Sauvegarde synchrone des données (utilisée au shutdown)."""
         try:
             data_to_save = {"guilds": {}}
             for guild_id, guild_data in self.data["guilds"].items():
@@ -115,8 +129,29 @@ class EngagementCog(commands.Cog):
             
             with open(DATA_FILE, 'w', encoding='utf-8') as f:
                 json.dump(data_to_save, f, ensure_ascii=False, indent=2)
+            
+            self._dirty = False
+            logger.info("[Engagement] Données sauvegardées")
         except Exception as e:
-            print(f"Erreur sauvegarde engagement: {e}")
+            logger.error(f"[Engagement] Erreur sauvegarde: {e}")
+    
+    async def _save_data_async(self):
+        """Sauvegarde asynchrone via executor."""
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, self._save_data_sync)
+        except Exception as e:
+            logger.error(f"[Engagement] Erreur sauvegarde async: {e}")
+    
+    @tasks.loop(seconds=SAVE_INTERVAL_SECONDS)
+    async def periodic_save(self):
+        """Sauvegarde périodique si données modifiées."""
+        if self._dirty:
+            await self._save_data_async()
+    
+    @periodic_save.before_loop
+    async def before_periodic_save(self):
+        await self.bot.wait_until_ready()
     
     def _get_paris_now(self):
         """Retourne la datetime actuelle à Paris."""
@@ -168,7 +203,9 @@ class EngagementCog(commands.Cog):
         # Vérifier si niveau up
         new_level = calculate_level(user_data["xp"])
         
-        self._save_data()
+        # Marquer comme modifié (sera sauvegardé périodiquement)
+        self._dirty = True
+        
         return user_data, old_level, new_level
     
     def _update_streak(self, user_data: dict):
@@ -184,6 +221,7 @@ class EngagementCog(commands.Cog):
             if last_streak == today - timedelta(days=1):
                 user_data["streak_days"] = user_data.get("streak_days", 0) + 1
                 user_data["last_streak_date"] = now.isoformat()
+                self._dirty = True
             # Si c'était aujourd'hui, on ne fait rien (déjà compté)
             elif last_streak == today:
                 pass
@@ -191,10 +229,12 @@ class EngagementCog(commands.Cog):
             else:
                 user_data["streak_days"] = 1
                 user_data["last_streak_date"] = now.isoformat()
+                self._dirty = True
         else:
             # Premier jour
             user_data["streak_days"] = 1
             user_data["last_streak_date"] = now.isoformat()
+            self._dirty = True
     
     def _reset_weekly(self, guild_id: int):
         """Reset les stats hebdomadaires pour un serveur."""
@@ -202,8 +242,8 @@ class EngagementCog(commands.Cog):
         for user_data in guild_data["users"].values():
             user_data["weekly_xp"] = 0
         
-        self._set_next_weekly_reset(guild_id)
-        self._save_data()
+        self._set_next_weekly_reset(guild_id, guild_data)
+        self._dirty = True
     
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -236,6 +276,9 @@ class EngagementCog(commands.Cog):
             if weekly_reset and now >= weekly_reset:
                 await self._post_ranking(int(guild_id_str))
                 self._reset_weekly(int(guild_id_str))
+                # Forcer sauvegarde après reset
+                if self._dirty:
+                    await self._save_data_async()
     
     @weekly_ranking.before_loop
     async def before_weekly_ranking(self):
@@ -278,7 +321,7 @@ class EngagementCog(commands.Cog):
             if member:
                 # Mettre à jour le nom stocké
                 user_data["display_name"] = member.display_name
-                self._save_data()
+                self._dirty = True
                 return member.display_name
         
         # Fallback sur le nom stocké
@@ -291,7 +334,7 @@ class EngagementCog(commands.Cog):
             user = await self.bot.fetch_user(user_id)
             if user:
                 user_data["display_name"] = user.display_name
-                self._save_data()
+                self._dirty = True
                 return user.display_name
         except:
             pass
@@ -313,7 +356,7 @@ class EngagementCog(commands.Cog):
                 if "général" in channel.name.lower() or "general" in channel.name.lower():
                     channel_id = channel.id
                     guild_data["channel_id"] = channel_id
-                    self._save_data()
+                    self._dirty = True
                     break
             if not channel_id:
                 return
