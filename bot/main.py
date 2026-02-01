@@ -25,6 +25,7 @@ class LucidBot(commands.Bot):
         await self.load_extension("bot.cogs.lucid")
         await self.load_extension("bot.cogs.gm")
         await self.load_extension("bot.cogs.engagement")
+        await self.load_extension("bot.cogs.analytics")
         await self.load_extension("bot.cogs.reactions")
         await self.load_extension("bot.cogs.error_handler")
         await self.load_extension("bot.cogs.help")
