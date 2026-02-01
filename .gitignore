@@ -20,3 +20,4 @@ dist/
 build/
 *.egg-info/
 gm_data.json
+engagement_data.json

@@ -24,6 +24,7 @@ class LucidBot(commands.Bot):
     async def setup_hook(self):
         await self.load_extension("bot.cogs.lucid")
         await self.load_extension("bot.cogs.gm")
+        await self.load_extension("bot.cogs.engagement")
 
         if config.GUILD_ID:
             guild = Object(id=config.GUILD_ID)
