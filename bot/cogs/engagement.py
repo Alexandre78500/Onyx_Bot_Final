@@ -516,6 +516,75 @@ class EngagementCog(commands.Cog):
         
         return f"Utilisateur {user_id}"
     
+    def _calculate_server_stats(self, guild_data: dict) -> dict:
+        """Calcule les statistiques globales du serveur."""
+        users = guild_data.get("users", {})
+        
+        if not users:
+            return {
+                "total_members": 0,
+                "total_xp": 0,
+                "average_xp": 0,
+                "total_messages": 0
+            }
+        
+        total_xp = sum(u.get("xp", 0) for u in users.values())
+        total_messages = sum(u.get("messages", 0) for u in users.values())
+        active_members = len(users)
+        average_xp = total_xp // active_members if active_members > 0 else 0
+        
+        return {
+            "total_members": active_members,
+            "total_xp": total_xp,
+            "average_xp": average_xp,
+            "total_messages": total_messages
+        }
+    
+    async def _get_rising_star(self, guild, guild_data: dict) -> tuple[str, int] | None:
+        """Trouve le membre avec le plus d'XP hebdomadaire (Rising Star)."""
+        users = guild_data.get("users", {})
+        
+        if not users:
+            return None
+        
+        # Trier par weekly_xp
+        sorted_by_weekly = sorted(
+            users.items(),
+            key=lambda x: x[1].get("weekly_xp", 0),
+            reverse=True
+        )
+        
+        if not sorted_by_weekly or sorted_by_weekly[0][1].get("weekly_xp", 0) == 0:
+            return None
+        
+        top_user_id, top_user_data = sorted_by_weekly[0]
+        display_name = await self._get_display_name(guild, int(top_user_id), top_user_data)
+        weekly_xp = top_user_data.get("weekly_xp", 0)
+        
+        return (display_name, weekly_xp)
+    
+    def _get_motivational_footer(self, position: int, total_users: int) -> str:
+        """Génère un message encourageant basé sur la position de l'utilisateur."""
+        if total_users == 0:
+            return "Sois le premier à gagner de l'XP !"
+        
+        percentage = (position / total_users) * 100
+        
+        if position == 1:
+            return "🏆 Incroyable ! Tu es le champion du serveur !"
+        elif position == 2:
+            return "🥈 Excellent ! Encore un petit effort pour la 1ère place !"
+        elif position == 3:
+            return "🥉 Bravo ! Tu es sur le podium !"
+        elif percentage <= 10:
+            return f"⭐ Superbe ! Tu es dans le top 10% du serveur !"
+        elif percentage <= 20:
+            return f"🎯 Continue comme ça ! Tu es dans le top 20% !"
+        elif percentage <= 50:
+            return f"💪 Bien joué ! Tu es dans la moitié supérieure !"
+        else:
+            return f"🚀 Continue tes efforts pour grimper au classement !"
+    
     async def _post_ranking(self, guild_id: int):
         """Poste le classement dans le canal configuré du serveur."""
         guild_data = self._get_guild_data(guild_id)
@@ -634,13 +703,45 @@ class EngagementCog(commands.Cog):
             await ctx.send("Aucun membre n'a encore d'activité enregistrée !")
             return
         
+        # Calculer les stats du serveur
+        server_stats = self._calculate_server_stats(guild_data)
+        
+        # Description enrichie avec stats globales
+        description = (
+            f"**Les légendes du serveur** 🌟\n"
+            f"`{server_stats['total_members']}` membres actifs • "
+            f"`{server_stats['total_xp']:,}` XP total • "
+            f"Moyenne: `{server_stats['average_xp']:,}` XP"
+        )
+        
         embed = Embed(
             title="🏆 Classement Global",
-            description="Top 10 des membres les plus actifs !",
-            color=0x9b59b6,
+            description=description,
+            color=0xFFD700,  # Or brillant
             timestamp=self._get_paris_now()
         )
         
+        # Thumbnail : Avatar du #1
+        try:
+            top_user_id = int(sorted_users[0][0])
+            top_member = ctx.guild.get_member(top_user_id)
+            if top_member:
+                embed.set_thumbnail(url=top_member.display_avatar.url)
+        except:
+            pass
+        
+        # Stats du serveur (field séparé)
+        stats_value = (
+            f"**Messages totaux:** {server_stats['total_messages']:,}\n"
+            f"**Membres actifs:** {server_stats['total_members']}"
+        )
+        embed.add_field(
+            name="📊 Statistiques du Serveur",
+            value=stats_value,
+            inline=False
+        )
+        
+        # Top 10 avec barres de progression
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
         
         top_users = sorted_users[:10]
@@ -651,27 +752,72 @@ class EngagementCog(commands.Cog):
             level = calculate_level(total_xp)
             progress, _ = get_level_progress(total_xp)
             
+            # Barre de progression
+            filled = int(progress / 10)
+            bar = "▰" * filled + "▱" * (10 - filled)
+            
             medal = medals[i] if i < 10 else f"{i+1}."
+            value = f"Niveau {level} • {total_xp:,} XP\n{bar} `{progress:.1f}%`"
+            
             embed.add_field(
                 name=f"{medal} {display_name}",
-                value=f"Niveau {level} • {total_xp} XP • {progress:.1f}%",
+                value=value,
                 inline=False
             )
         
+        # Rising Star
+        rising_star = await self._get_rising_star(ctx.guild, guild_data)
+        if rising_star:
+            star_name, star_xp = rising_star
+            embed.add_field(
+                name="📈 Rising Star (cette semaine)",
+                value=f"🌟 **{star_name}** • +{star_xp:,} XP",
+                inline=False
+            )
+        
+        # Position de l'auteur (détaillée)
         author_id = str(ctx.author.id)
         author_position = next((i for i, (uid, _) in enumerate(sorted_users) if uid == author_id), None)
+        
         if author_position is not None:
             total_users = len(sorted_users)
             author_rank = author_position + 1
-            author_xp = sorted_users[author_position][1].get("xp", 0)
+            author_data = sorted_users[author_position][1]
+            author_xp = author_data.get("xp", 0)
+            author_level = calculate_level(author_xp)
+            author_progress, _ = get_level_progress(author_xp)
+            
+            # Barre de progression de l'auteur
+            author_filled = int(author_progress / 10)
+            author_bar = "▰" * author_filled + "▱" * (10 - author_filled)
+            
+            # Écart avec le joueur au-dessus
             xp_gap_text = ""
             if author_position > 0:
                 xp_above = sorted_users[author_position - 1][1].get("xp", 0)
                 gap = max(0, xp_above - author_xp)
-                xp_gap_text = f" • Écart devant: {gap} XP"
-            embed.set_footer(text=f"Ta position: #{author_rank} / {total_users}{xp_gap_text}")
+                xp_gap_text = f"\nÉcart avec #{author_position}: `{gap:,}` XP"
+            
+            author_value = (
+                f"**#{author_rank}** sur {total_users} • Niveau {author_level} • {author_xp:,} XP\n"
+                f"{author_bar} `{author_progress:.1f}%`"
+                f"{xp_gap_text}"
+            )
+            
+            # N'afficher que si l'auteur n'est pas dans le top 10
+            if author_position >= 10:
+                embed.add_field(
+                    name="👤 Ta Position",
+                    value=author_value,
+                    inline=False
+                )
+            
+            # Footer motivant
+            motivational_msg = self._get_motivational_footer(author_rank, total_users)
+            embed.set_footer(text=motivational_msg)
         else:
-            embed.set_footer(text="Tu n'as pas encore d'activité enregistrée")
+            embed.set_footer(text="Tu n'as pas encore d'activité enregistrée. Commence à discuter pour apparaître ici !")
+        
         await ctx.send(embed=embed)
 
 
