@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import random
+import re
 from datetime import datetime, timedelta
 from typing import TypedDict
 
@@ -30,6 +31,26 @@ XP_PER_MESSAGE_MAX = CONST_XP_PER_MESSAGE_MAX
 XP_GM_BONUS = CONST_XP_GM_BONUS
 
 logger = logging.getLogger(__name__)
+
+URL_RE = re.compile(r"https?://\S+")
+CUSTOM_EMOJI_RE = re.compile(r"<a?:([A-Za-z0-9_]+):\d+>")
+SHORTCODE_EMOJI_RE = re.compile(r":([A-Za-z0-9_]+):")
+UNICODE_EMOJI_RE = re.compile(
+    "["
+    "\U0001F300-\U0001F5FF"
+    "\U0001F600-\U0001F64F"
+    "\U0001F680-\U0001F6FF"
+    "\U0001F700-\U0001F77F"
+    "\U0001F780-\U0001F7FF"
+    "\U0001F800-\U0001F8FF"
+    "\U0001F900-\U0001F9FF"
+    "\U0001FA00-\U0001FA6F"
+    "\U0001FA70-\U0001FAFF"
+    "\U00002700-\U000027BF"
+    "\U00002600-\U000026FF"
+    "]",
+    re.UNICODE,
+)
 
 
 class EngagementUser(TypedDict):
@@ -175,6 +196,21 @@ class EngagementCog(commands.Cog):
     def _get_paris_now(self):
         """Retourne la datetime actuelle à Paris."""
         return datetime.now(PARIS_TZ)
+
+    def _extract_countable_words(self, text: str) -> list[str]:
+        if not text:
+            return []
+
+        text = text.lower()
+        text = URL_RE.sub(" ", text)
+        text = CUSTOM_EMOJI_RE.sub(" ", text)
+        text = SHORTCODE_EMOJI_RE.sub(" ", text)
+        text = UNICODE_EMOJI_RE.sub(" ", text)
+
+        for char in ".,;:!?\"'()[]{}@#&-_=+/*$%":
+            text = text.replace(char, " ")
+
+        return [w.strip() for w in text.split() if w.strip()]
     
     def _check_cooldown(self, guild_id: int, user_id: int) -> bool:
         """Vérifie si l'utilisateur peut gagner de l'XP (cooldown 15s)."""
@@ -386,6 +422,9 @@ class EngagementCog(commands.Cog):
         # Ignorer bot et DM
         if message.author.bot or not message.guild:
             return
+
+        if not self._extract_countable_words(message.content):
+            return
         
         guild_id = message.guild.id
         user_id = message.author.id
@@ -395,7 +434,7 @@ class EngagementCog(commands.Cog):
             return
         
         # Ajouter XP (5-15 aléatoire)
-        xp_gain = random.randint(XP_PER_MESSAGE_MIN, XP_PER_MESSAGE_MAX)
+        xp_gain = XP_PER_MESSAGE_MIN
         user_data, old_level, new_level = self._add_xp(guild_id, user_id, xp_gain, message.author.display_name)
         
         # Si level up, envoyer un message de félicitations

@@ -39,6 +39,8 @@ COMMON_WORDS = {
 }
 
 CUSTOM_EMOJI_RE = re.compile(r"<a?:([A-Za-z0-9_]+):\d+>")
+SHORTCODE_EMOJI_RE = re.compile(r":([A-Za-z0-9_]+):")
+URL_RE = re.compile(r"https?://\S+")
 UNICODE_EMOJI_RE = re.compile(
     "["
     "\U0001F300-\U0001F5FF"
@@ -318,6 +320,12 @@ class AnalyticsCog(commands.Cog):
         """Extrait les mots d'un texte (minuscules, sans ponctuation)."""
         # Convertir en minuscules
         text = text.lower()
+
+        # Retirer liens et emojis
+        text = URL_RE.sub(" ", text)
+        text = CUSTOM_EMOJI_RE.sub(" ", text)
+        text = SHORTCODE_EMOJI_RE.sub(" ", text)
+        text = UNICODE_EMOJI_RE.sub(" ", text)
         
         # Remplacer la ponctuation par des espaces
         for char in ".,;:!?\"'()[]{}@#&-_=+/*$%":
