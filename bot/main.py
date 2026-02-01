@@ -19,7 +19,7 @@ class LucidBot(commands.Bot):
     def __init__(self):
         intents = Intents.default()
         intents.message_content = True  # Nécessaire pour lire les messages (GM)
-        super().__init__(command_prefix="!", intents=intents)
+        super().__init__(command_prefix=["o!", "O!"], intents=intents, help_command=None)
 
     async def setup_hook(self):
         await self.load_extension("bot.cogs.lucid")

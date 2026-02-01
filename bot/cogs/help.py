@@ -29,10 +29,10 @@ class HelpCog(commands.Cog):
         
         # Commandes Engagement
         embed.add_field(
-            name="📊 Engagement (Slash / et Préfixé !)",
+            name="📊 Engagement (Slash / et Préfixé o!)",
             value="""
-            `/rang` ou `!rang` - Voir ton niveau et tes statistiques
-            `/classement` ou `!classement` - Voir le top 10 global
+            `/rang` ou `o!rang` - Voir ton niveau et tes statistiques
+            `/classement` ou `o!classement` - Voir le top 10 global
             """,
             inline=False
         )
@@ -53,7 +53,7 @@ class HelpCog(commands.Cog):
             name="ℹ️ Informations",
             value="""
             • Les commandes avec `/` sont des **slash commands**
-            • Les commandes avec `!` sont des **commandes préfixées**
+            • Les commandes avec `o!` sont des **commandes préfixées**
             • Les deux fonctionnent, utilise celle que tu préfères !
             """,
             inline=False
