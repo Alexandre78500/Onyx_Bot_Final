@@ -1,4 +1,6 @@
 import asyncio
+import json
+import os
 import random
 from datetime import datetime, time
 
@@ -10,6 +12,9 @@ PARIS_TZ = pytz.timezone('Europe/Paris')
 
 # Heure de reset (5h30 du matin)
 RESET_TIME = time(5, 30)
+
+# Fichier de sauvegarde
+DATA_FILE = "gm_data.json"
 
 # Réponses personnalisées avec placeholder {pseudo}
 GM_RESPONSES = [
@@ -29,6 +34,40 @@ class GMCog(commands.Cog):
         self.bot = bot
         # Structure: {guild_id: {user_id: (date, has_gm_been_said)}}
         self.gm_tracker = {}
+        self._load_data()
+
+    def _load_data(self):
+        """Charge les données GM depuis le fichier JSON."""
+        if os.path.exists(DATA_FILE):
+            try:
+                with open(DATA_FILE, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    # Convertir les dates string en objets date
+                    for guild_id, users in data.items():
+                        guild_id = int(guild_id)
+                        self.gm_tracker[guild_id] = {}
+                        for user_id, (date_str, has_said) in users.items():
+                            user_id = int(user_id)
+                            date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+                            self.gm_tracker[guild_id][user_id] = (date_obj, has_said)
+            except Exception as e:
+                print(f"Erreur lors du chargement des données GM: {e}")
+                self.gm_tracker = {}
+
+    def _save_data(self):
+        """Sauvegarde les données GM dans le fichier JSON."""
+        try:
+            # Convertir les dates en string pour JSON
+            data = {}
+            for guild_id, users in self.gm_tracker.items():
+                data[str(guild_id)] = {}
+                for user_id, (date_obj, has_said) in users.items():
+                    data[str(guild_id)][str(user_id)] = (date_obj.strftime('%Y-%m-%d'), has_said)
+            
+            with open(DATA_FILE, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Erreur lors de la sauvegarde des données GM: {e}")
 
     def _get_current_datetime(self) -> datetime:
         """Retourne la date/heure actuelle en timezone Paris."""
@@ -65,6 +104,7 @@ class GMCog(commands.Cog):
             if guild_id not in self.gm_tracker:
                 self.gm_tracker[guild_id] = {}
             self.gm_tracker[guild_id][user_id] = (now.date(), False)
+            self._save_data()
 
     def _has_gm_been_said(self, guild_id: int, user_id: int) -> bool:
         """Vérifie si cet utilisateur a déjà dit GM aujourd'hui sur ce serveur."""
@@ -81,6 +121,7 @@ class GMCog(commands.Cog):
         if guild_id not in self.gm_tracker:
             self.gm_tracker[guild_id] = {}
         self.gm_tracker[guild_id][user_id] = (now.date(), True)
+        self._save_data()
 
     @commands.Cog.listener()
     async def on_message(self, message):
