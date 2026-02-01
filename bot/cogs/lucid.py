@@ -4,12 +4,12 @@ from discord import Interaction, app_commands
 from discord.ext import commands
 
 
-LUCID_TIPS = [
-    "Keep a dream journal next to your bed.",
-    "Do a reality check every time you see a mirror.",
-    "Set a simple intention before sleep: notice you are dreaming.",
-    "Wake up after 5 hours, stay up 10 minutes, then go back to sleep.",
-    "Look for recurring dream signs and question them during the day.",
+CONSEILS_REVE_LUCIDE = [
+    "Garde un journal de rêves à côté de ton lit.",
+    "Fais un test de réalité à chaque fois que tu vois un miroir.",
+    "Fixe une intention simple avant de dormir : remarquer que tu rêves.",
+    "Réveille-toi après 5 heures, reste debout 10 minutes, puis rendors-toi.",
+    "Cherche des signes de rêves récurrents et questionne-les pendant la journée.",
 ]
 
 
@@ -17,22 +17,22 @@ class LucidCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="tip", description="Get a lucid dreaming tip")
-    async def tip(self, interaction: Interaction):
-        tip = random.choice(LUCID_TIPS)
-        await interaction.response.send_message(f"Tip: {tip}")
+    @app_commands.command(name="conseil", description="Obtenir un conseil pour faire des rêves lucides")
+    async def conseil(self, interaction: Interaction):
+        conseil = random.choice(CONSEILS_REVE_LUCIDE)
+        await interaction.response.send_message(f"💡 Conseil : {conseil}")
 
-    @app_commands.command(name="journal", description="Save a dream note")
-    @app_commands.describe(entry="Your dream entry")
-    async def journal(self, interaction: Interaction, entry: str):
+    @app_commands.command(name="journal", description="Sauvegarder une note de rêve")
+    @app_commands.describe(entree="Ton entrée de rêve")
+    async def journal(self, interaction: Interaction, entree: str):
         await interaction.response.send_message(
-            "Note saved (local only for now).", ephemeral=True
+            "📝 Note sauvegardée (localement pour l'instant).", ephemeral=True
         )
 
-    @app_commands.command(name="resource", description="Share a useful resource")
-    async def resource(self, interaction: Interaction):
+    @app_commands.command(name="ressource", description="Partager une ressource utile")
+    async def ressource(self, interaction: Interaction):
         await interaction.response.send_message(
-            "Resource: https://en.wikipedia.org/wiki/Lucid_dream"
+            "📚 Ressource : https://fr.wikipedia.org/wiki/Rêve_lucide"
         )
 
 
