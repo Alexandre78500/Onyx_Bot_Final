@@ -16,6 +16,7 @@ from bot.constants import (
     ANALYTICS_MESSAGE_CACHE_TTL_SECONDS,
     ANALYTICS_SAVE_INTERVAL_MINUTES,
     ANALYTICS_WORD_COUNT_TOP_N,
+    ANALYTICS_DEBUG_WORDS,
 )
 
 # Configuration
@@ -275,9 +276,22 @@ class AnalyticsCog(commands.Cog):
         # 4. Word count
         if message.content:
             words = self._extract_words(message.content)
-            for word in words:
-                if word not in COMMON_WORDS and len(word) >= 3:
-                    stats["word_counts"][word] = stats["word_counts"].get(word, 0) + 1
+            kept_words = [word for word in words if word not in COMMON_WORDS and len(word) >= 3]
+            for word in kept_words:
+                stats["word_counts"][word] = stats["word_counts"].get(word, 0) + 1
+            if ANALYTICS_DEBUG_WORDS and kept_words:
+                logger.debug(
+                    "[Analytics] Words kept guild=%s author=%s words=%s",
+                    guild_id,
+                    author_id,
+                    kept_words,
+                )
+                try:
+                    await message.channel.send(
+                        f"[Debug mots] {', '.join(kept_words)}"
+                    )
+                except Exception:
+                    pass
 
         # 4b. Emojis texte (par utilisateur)
         if message.content:
