@@ -12,7 +12,6 @@ from discord.ext import commands, tasks
 PARIS_TZ = pytz.timezone('Europe/Paris')
 DATA_FILE = "engagement_data.json"
 COOLDOWN_SECONDS = 15  # Anti-spam: 15 secondes entre chaque comptabilisation
-GENERAL_CHANNEL_ID = 376777553945296899  # Canal général
 
 # Gains d'XP
 XP_PER_MESSAGE_MIN = 5
@@ -45,17 +44,27 @@ def get_level_progress(xp):
 class EngagementCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.data = {"users": {}, "weekly_reset": None}
-        self.cooldowns = {}  # {user_id: last_message_time}
+        self.data = {"guilds": {}}  # Structure: {guild_id: {users: {}, weekly_reset: None, channel_id: None}}
+        self.cooldowns = {}  # {(guild_id, user_id): last_message_time}
         self._load_data()
-        # Initialiser le prochain reset si nécessaire
-        if self.data["weekly_reset"] is None:
-            self._set_next_weekly_reset()
-            self._save_data()
         self.weekly_ranking.start()
     
-    def _set_next_weekly_reset(self):
-        """Définit le prochain reset hebdomadaire (dimanche 20h)."""
+    def _get_guild_data(self, guild_id: int):
+        """Récupère ou crée les données d'un serveur."""
+        guild_id_str = str(guild_id)
+        if guild_id_str not in self.data["guilds"]:
+            self.data["guilds"][guild_id_str] = {
+                "users": {},
+                "weekly_reset": None,
+                "channel_id": None
+            }
+            # Initialiser le prochain reset
+            self._set_next_weekly_reset(guild_id)
+            self._save_data()
+        return self.data["guilds"][guild_id_str]
+    
+    def _set_next_weekly_reset(self, guild_id: int):
+        """Définit le prochain reset hebdomadaire (dimanche 20h) pour un serveur."""
         now = self._get_paris_now()
         # Trouver le prochain dimanche
         days_until_sunday = (6 - now.weekday()) % 7
@@ -64,7 +73,9 @@ class EngagementCog(commands.Cog):
             days_until_sunday = 7
         next_reset = now + timedelta(days=days_until_sunday)
         next_reset = next_reset.replace(hour=20, minute=0, second=0, microsecond=0)
-        self.data["weekly_reset"] = next_reset
+        
+        guild_data = self._get_guild_data(guild_id)
+        guild_data["weekly_reset"] = next_reset
     
     def cog_unload(self):
         self.weekly_ranking.cancel()
@@ -74,20 +85,32 @@ class EngagementCog(commands.Cog):
         if os.path.exists(DATA_FILE):
             try:
                 with open(DATA_FILE, 'r', encoding='utf-8') as f:
-                    self.data = json.load(f)
-                    # Convertir les dates
-                    if self.data.get("weekly_reset"):
-                        self.data["weekly_reset"] = datetime.fromisoformat(self.data["weekly_reset"])
+                    loaded_data = json.load(f)
+                    # Migration des anciennes données (global -> guilds)
+                    if "users" in loaded_data and "guilds" not in loaded_data:
+                        print("Migration des données d'engagement vers le nouveau format...")
+                        self.data = {"guilds": {}}
+                        # On met les anciennes données dans un guild "legacy" (sera ignoré)
+                    else:
+                        self.data = loaded_data
+                        # Convertir les dates pour chaque guild
+                        for guild_data in self.data.get("guilds", {}).values():
+                            if guild_data.get("weekly_reset"):
+                                guild_data["weekly_reset"] = datetime.fromisoformat(guild_data["weekly_reset"])
             except Exception as e:
                 print(f"Erreur chargement engagement: {e}")
-                self.data = {"users": {}, "weekly_reset": None}
+                self.data = {"guilds": {}}
     
     def _save_data(self):
         """Sauvegarde les données dans le fichier JSON."""
         try:
-            data_to_save = self.data.copy()
-            if data_to_save.get("weekly_reset"):
-                data_to_save["weekly_reset"] = data_to_save["weekly_reset"].isoformat()
+            data_to_save = {"guilds": {}}
+            for guild_id, guild_data in self.data["guilds"].items():
+                data_to_save["guilds"][guild_id] = {
+                    "users": guild_data["users"],
+                    "weekly_reset": guild_data["weekly_reset"].isoformat() if guild_data.get("weekly_reset") else None,
+                    "channel_id": guild_data.get("channel_id")
+                }
             
             with open(DATA_FILE, 'w', encoding='utf-8') as f:
                 json.dump(data_to_save, f, ensure_ascii=False, indent=2)
@@ -98,22 +121,24 @@ class EngagementCog(commands.Cog):
         """Retourne la datetime actuelle à Paris."""
         return datetime.now(PARIS_TZ)
     
-    def _check_cooldown(self, user_id: int) -> bool:
+    def _check_cooldown(self, guild_id: int, user_id: int) -> bool:
         """Vérifie si l'utilisateur peut gagner de l'XP (cooldown 15s)."""
         now = self._get_paris_now()
-        if user_id in self.cooldowns:
-            last_time = self.cooldowns[user_id]
+        cooldown_key = (guild_id, user_id)
+        if cooldown_key in self.cooldowns:
+            last_time = self.cooldowns[cooldown_key]
             if (now - last_time).total_seconds() < COOLDOWN_SECONDS:
                 return False
-        self.cooldowns[user_id] = now
+        self.cooldowns[cooldown_key] = now
         return True
     
-    def _add_xp(self, user_id: int, xp_amount: int, user_name: str | None = None, is_weekly: bool = True):
-        """Ajoute de l'XP à un utilisateur."""
+    def _add_xp(self, guild_id: int, user_id: int, xp_amount: int, user_name: str | None = None, is_weekly: bool = True):
+        """Ajoute de l'XP à un utilisateur dans un serveur spécifique."""
+        guild_data = self._get_guild_data(guild_id)
         user_id_str = str(user_id)
         
-        if user_id_str not in self.data["users"]:
-            self.data["users"][user_id_str] = {
+        if user_id_str not in guild_data["users"]:
+            guild_data["users"][user_id_str] = {
                 "xp": 0,
                 "weekly_xp": 0,
                 "messages": 0,
@@ -121,7 +146,7 @@ class EngagementCog(commands.Cog):
                 "display_name": user_name
             }
         
-        user_data = self.data["users"][user_id_str]
+        user_data = guild_data["users"][user_id_str]
         user_data["xp"] += xp_amount
         if is_weekly:
             user_data["weekly_xp"] += xp_amount
@@ -133,12 +158,13 @@ class EngagementCog(commands.Cog):
         self._save_data()
         return user_data
     
-    def _reset_weekly(self):
-        """Reset les stats hebdomadaires."""
-        for user_data in self.data["users"].values():
+    def _reset_weekly(self, guild_id: int):
+        """Reset les stats hebdomadaires pour un serveur."""
+        guild_data = self._get_guild_data(guild_id)
+        for user_data in guild_data["users"].values():
             user_data["weekly_xp"] = 0
         
-        self._set_next_weekly_reset()
+        self._set_next_weekly_reset(guild_id)
         self._save_data()
     
     @commands.Cog.listener()
@@ -147,40 +173,87 @@ class EngagementCog(commands.Cog):
         if message.author.bot or not message.guild:
             return
         
+        guild_id = message.guild.id
         user_id = message.author.id
         
         # Vérifier cooldown anti-spam
-        if not self._check_cooldown(user_id):
+        if not self._check_cooldown(guild_id, user_id):
             return
         
         # Ajouter XP (5-15 aléatoire)
         xp_gain = random.randint(XP_PER_MESSAGE_MIN, XP_PER_MESSAGE_MAX)
-        self._add_xp(user_id, xp_gain, message.author.display_name)
+        self._add_xp(guild_id, user_id, xp_gain, message.author.display_name)
     
     @tasks.loop(minutes=1)
     async def weekly_ranking(self):
-        """Poste le classement hebdomadaire le dimanche à 20h."""
+        """Poste le classement hebdomadaire pour chaque serveur le dimanche à 20h."""
         now = self._get_paris_now()
         
-        # Vérifier si c'est le moment de poster
-        if self.data.get("weekly_reset") and now >= self.data["weekly_reset"]:
-            await self._post_ranking()
-            self._reset_weekly()
+        for guild_id_str, guild_data in self.data.get("guilds", {}).items():
+            weekly_reset = guild_data.get("weekly_reset")
+            if weekly_reset and now >= weekly_reset:
+                await self._post_ranking(int(guild_id_str))
+                self._reset_weekly(int(guild_id_str))
     
     @weekly_ranking.before_loop
     async def before_weekly_ranking(self):
         await self.bot.wait_until_ready()
     
-    async def _post_ranking(self):
-        """Poste le classement dans le canal général."""
-        channel = self.bot.get_channel(GENERAL_CHANNEL_ID)
+    async def _get_display_name(self, guild, user_id: int, user_data: dict) -> str:
+        """Récupère le nom d'affichage d'un utilisateur avec fallback."""
+        # Essayer de récupérer depuis le cache Discord
+        if guild:
+            member = guild.get_member(user_id)
+            if member:
+                # Mettre à jour le nom stocké
+                user_data["display_name"] = member.display_name
+                self._save_data()
+                return member.display_name
+        
+        # Fallback sur le nom stocké
+        stored_name = user_data.get("display_name")
+        if stored_name:
+            return stored_name
+        
+        # Dernier recours: essayer de fetch l'utilisateur
+        try:
+            user = await self.bot.fetch_user(user_id)
+            if user:
+                user_data["display_name"] = user.display_name
+                self._save_data()
+                return user.display_name
+        except:
+            pass
+        
+        return f"Utilisateur {user_id}"
+    
+    async def _post_ranking(self, guild_id: int):
+        """Poste le classement dans le canal configuré du serveur."""
+        guild_data = self._get_guild_data(guild_id)
+        channel_id = guild_data.get("channel_id")
+        
+        if not channel_id:
+            # Pas de canal configuré, essayer de trouver un canal général
+            guild = self.bot.get_guild(guild_id)
+            if not guild:
+                return
+            # Chercher un canal nommé "général" ou "general"
+            for channel in guild.text_channels:
+                if "général" in channel.name.lower() or "general" in channel.name.lower():
+                    channel_id = channel.id
+                    guild_data["channel_id"] = channel_id
+                    self._save_data()
+                    break
+            if not channel_id:
+                return
+        
+        channel = self.bot.get_channel(channel_id)
         if not channel:
-            print(f"Canal {GENERAL_CHANNEL_ID} non trouvé")
             return
         
         # Trier par XP hebdomadaire
         sorted_users = sorted(
-            self.data["users"].items(),
+            guild_data["users"].items(),
             key=lambda x: x[1].get("weekly_xp", 0),
             reverse=True
         )[:10]  # Top 10
@@ -197,11 +270,10 @@ class EngagementCog(commands.Cog):
         )
         
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+        guild = self.bot.get_guild(guild_id)
         
         for i, (user_id, data) in enumerate(sorted_users):
-            user = self.bot.get_user(int(user_id))
-            # Utiliser le nom stocké si l'utilisateur n'est pas dans le cache
-            display_name = user.display_name if user else data.get("display_name", f"Utilisateur {user_id}")
+            display_name = await self._get_display_name(guild, int(user_id), data)
             
             weekly_xp = data.get("weekly_xp", 0)
             total_xp = data.get("xp", 0)
@@ -216,25 +288,30 @@ class EngagementCog(commands.Cog):
         
         # Mention du gagnant
         winner_id = sorted_users[0][0]
-        winner = self.bot.get_user(int(winner_id))
         winner_data = sorted_users[0][1]
-        winner_name = winner.display_name if winner else winner_data.get("display_name", "Inconnu")
+        winner_name = await self._get_display_name(guild, int(winner_id), winner_data)
         embed.set_footer(text=f"🎉 Bravo à {winner_name} pour cette semaine !")
         
         await channel.send(embed=embed)
     
     @app_commands.command(name="rang", description="Voir ton niveau et tes statistiques")
     async def rang(self, interaction):
+        if not interaction.guild:
+            await interaction.response.send_message("Cette commande ne fonctionne pas en DM.", ephemeral=True)
+            return
+        
+        guild_id = interaction.guild.id
+        guild_data = self._get_guild_data(guild_id)
         user_id = str(interaction.user.id)
         
-        if user_id not in self.data["users"]:
+        if user_id not in guild_data["users"]:
             await interaction.response.send_message(
                 "Tu n'as pas encore d'activité enregistrée. Commence à discuter pour gagner de l'XP ! 📈",
                 ephemeral=True
             )
             return
         
-        user_data = self.data["users"][user_id]
+        user_data = guild_data["users"][user_id]
         total_xp = user_data.get("xp", 0)
         weekly_xp = user_data.get("weekly_xp", 0)
         messages = user_data.get("messages", 0)
@@ -244,7 +321,7 @@ class EngagementCog(commands.Cog):
         
         # Calculer position
         all_users = sorted(
-            self.data["users"].items(),
+            guild_data["users"].items(),
             key=lambda x: x[1].get("xp", 0),
             reverse=True
         )
@@ -269,9 +346,16 @@ class EngagementCog(commands.Cog):
     
     @app_commands.command(name="classement", description="Voir le classement global")
     async def classement(self, interaction):
+        if not interaction.guild:
+            await interaction.response.send_message("Cette commande ne fonctionne pas en DM.", ephemeral=True)
+            return
+        
+        guild_id = interaction.guild.id
+        guild_data = self._get_guild_data(guild_id)
+        
         # Trier par XP total
         sorted_users = sorted(
-            self.data["users"].items(),
+            guild_data["users"].items(),
             key=lambda x: x[1].get("xp", 0),
             reverse=True
         )[:10]
@@ -293,17 +377,7 @@ class EngagementCog(commands.Cog):
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
         
         for i, (user_id, data) in enumerate(sorted_users):
-            # Essayer d'obtenir le membre depuis la guild pour avoir le nom à jour
-            member = interaction.guild.get_member(int(user_id)) if interaction.guild else None
-            user = self.bot.get_user(int(user_id))
-            # Priorité: member > user > data stocké
-            display_name = None
-            if member:
-                display_name = member.display_name
-            elif user:
-                display_name = user.display_name
-            else:
-                display_name = data.get("display_name", f"Utilisateur {user_id}")
+            display_name = await self._get_display_name(interaction.guild, int(user_id), data)
             
             total_xp = data.get("xp", 0)
             level = calculate_level(total_xp)
@@ -322,13 +396,19 @@ class EngagementCog(commands.Cog):
     @commands.command(name="rang", aliases=["rank", "stats", "profil", "niveau"])
     async def rang_prefix(self, ctx):
         """Voir ton niveau et tes statistiques (préfixé)"""
+        if not ctx.guild:
+            await ctx.send("Cette commande ne fonctionne pas en DM.")
+            return
+        
+        guild_id = ctx.guild.id
+        guild_data = self._get_guild_data(guild_id)
         user_id = str(ctx.author.id)
         
-        if user_id not in self.data["users"]:
+        if user_id not in guild_data["users"]:
             await ctx.send("Tu n'as pas encore d'activité enregistrée. Commence à discuter pour gagner de l'XP ! 📈")
             return
         
-        user_data = self.data["users"][user_id]
+        user_data = guild_data["users"][user_id]
         total_xp = user_data.get("xp", 0)
         weekly_xp = user_data.get("weekly_xp", 0)
         messages = user_data.get("messages", 0)
@@ -338,7 +418,7 @@ class EngagementCog(commands.Cog):
         
         # Calculer position
         all_users = sorted(
-            self.data["users"].items(),
+            guild_data["users"].items(),
             key=lambda x: x[1].get("xp", 0),
             reverse=True
         )
@@ -364,9 +444,16 @@ class EngagementCog(commands.Cog):
     @commands.command(name="classement", aliases=["ranking", "top", "leaderboard", "top10"])
     async def classement_prefix(self, ctx):
         """Voir le classement global (préfixé)"""
+        if not ctx.guild:
+            await ctx.send("Cette commande ne fonctionne pas en DM.")
+            return
+        
+        guild_id = ctx.guild.id
+        guild_data = self._get_guild_data(guild_id)
+        
         # Trier par XP total
         sorted_users = sorted(
-            self.data["users"].items(),
+            guild_data["users"].items(),
             key=lambda x: x[1].get("xp", 0),
             reverse=True
         )[:10]
@@ -385,17 +472,7 @@ class EngagementCog(commands.Cog):
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
         
         for i, (user_id, data) in enumerate(sorted_users):
-            # Essayer d'obtenir le membre depuis la guild pour avoir le nom à jour
-            member = ctx.guild.get_member(int(user_id)) if ctx.guild else None
-            user = self.bot.get_user(int(user_id))
-            # Priorité: member > user > data stocké
-            display_name = None
-            if member:
-                display_name = member.display_name
-            elif user:
-                display_name = user.display_name
-            else:
-                display_name = data.get("display_name", f"Utilisateur {user_id}")
+            display_name = await self._get_display_name(ctx.guild, int(user_id), data)
             
             total_xp = data.get("xp", 0)
             level = calculate_level(total_xp)
