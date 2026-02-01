@@ -21,11 +21,11 @@ Bot Discord complet avec système de rêves lucides, engagement utilisateur et a
 - `o!ressource` - Liens vers des ressources éducatives
 
 ### 📊 Système d'Engagement (XP & Niveaux)
-- **Gain d'XP automatique** : 5-15 XP par message (cooldown 15s)
+- **Gain d'XP automatique** : 8 XP par message (cooldown 15s)
 - **Niveaux progressifs** : Algorithmes de niveau avec courbe d'XP croissante
 - **Félicitations automatiques** : Messages de félicitations quand on monte de niveau
 - **Profil** : `o!profil` affiche un embed riche (niveau, XP, position, emojis, mots, tranche)
-- **Classement** : `o!classement` (top 10 serveur)
+- **Classement** : `o!classement` (top 10 serveur + ta position + écart d'XP + progression)
 - **Streak journalier** : Nombre de jours consécutifs d'activité
 - **Classement hebdomadaire** : Post automatique le dimanche à 20h
 
@@ -268,7 +268,7 @@ sudo journalctl -u discord-bot.service -f
 
 ### Commandes Engagement
 - `o!profil` / `o!rang` / `o!stats` - Carte profil (niveau, XP, emojis, mots, tranche)
-- `o!classement` / `o!top` - Top 10 du serveur
+- `o!classement` / `o!top` - Top 10 du serveur + ta position + écart d'XP + progression
 
 ### Aliases disponibles
 Chaque commande a plusieurs aliases pour être facilement trouvée :
@@ -279,7 +279,7 @@ Chaque commande a plusieurs aliases pour être facilement trouvée :
 
 ### Features automatiques
 - **Dis `gm`** → Le bot répond avec un message personnalisé (1x/jour)
-- **Parle normalement** → Gagne de l'XP (5-15 par message, cooldown 15s)
+- **Parle normalement** → Gagne de l'XP (8 par message, cooldown 15s)
 - **Niveau up** → Félicitations automatiques
 - **`:hap:` ou `:noel:`** dans un message → Le bot réagit avec l'emoji
 - **Faute de frappe** → Suggestion de la bonne commande (ex: `o!classsement`)
@@ -299,7 +299,7 @@ GUILD_ID=123456789  # Optionnel - pour sync rapide dev
 
 **`engagement.py`** :
 - `COOLDOWN_SECONDS = 15` - Anti-spam XP
-- `XP_PER_MESSAGE_MIN/MAX = 5/15` - XP par message
+- `XP_PER_MESSAGE_MIN/MAX = 8/8` - XP par message
 - Reset hebdomadaire : Dimanche 20h (Europe/Paris)
 
 **`gm.py`** :

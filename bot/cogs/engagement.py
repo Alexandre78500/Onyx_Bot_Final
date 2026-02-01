@@ -628,7 +628,7 @@ class EngagementCog(commands.Cog):
             guild_data["users"].items(),
             key=lambda x: x[1].get("xp", 0),
             reverse=True
-        )[:10]
+        )
         
         if not sorted_users:
             await ctx.send("Aucun membre n'a encore d'activité enregistrée !")
@@ -643,20 +643,35 @@ class EngagementCog(commands.Cog):
         
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
         
-        for i, (user_id, data) in enumerate(sorted_users):
+        top_users = sorted_users[:10]
+        for i, (user_id, data) in enumerate(top_users):
             display_name = await self._get_display_name(ctx.guild, int(user_id), data)
             
             total_xp = data.get("xp", 0)
             level = calculate_level(total_xp)
-            messages = data.get("messages", 0)
+            progress, _ = get_level_progress(total_xp)
             
             medal = medals[i] if i < 10 else f"{i+1}."
             embed.add_field(
                 name=f"{medal} {display_name}",
-                value=f"Niveau {level} • {total_xp} XP • {messages} messages",
+                value=f"Niveau {level} • {total_xp} XP • {progress:.1f}%",
                 inline=False
             )
         
+        author_id = str(ctx.author.id)
+        author_position = next((i for i, (uid, _) in enumerate(sorted_users) if uid == author_id), None)
+        if author_position is not None:
+            total_users = len(sorted_users)
+            author_rank = author_position + 1
+            author_xp = sorted_users[author_position][1].get("xp", 0)
+            xp_gap_text = ""
+            if author_position > 0:
+                xp_above = sorted_users[author_position - 1][1].get("xp", 0)
+                gap = max(0, xp_above - author_xp)
+                xp_gap_text = f" • Écart devant: {gap} XP"
+            embed.set_footer(text=f"Ta position: #{author_rank} / {total_users}{xp_gap_text}")
+        else:
+            embed.set_footer(text="Tu n'as pas encore d'activité enregistrée")
         await ctx.send(embed=embed)
 
 
