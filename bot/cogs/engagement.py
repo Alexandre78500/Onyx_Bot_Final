@@ -3,6 +3,7 @@ import json
 import os
 import random
 from datetime import datetime, time, timedelta
+from difflib import get_close_matches
 
 import pytz
 from discord import Embed, Object, app_commands
@@ -143,10 +144,16 @@ class EngagementCog(commands.Cog):
                 "weekly_xp": 0,
                 "messages": 0,
                 "last_active": None,
-                "display_name": user_name
+                "display_name": user_name,
+                "streak_days": 0,
+                "last_streak_date": None
             }
         
         user_data = guild_data["users"][user_id_str]
+        
+        # Calculer le niveau avant l'ajout d'XP
+        old_level = calculate_level(user_data["xp"])
+        
         user_data["xp"] += xp_amount
         if is_weekly:
             user_data["weekly_xp"] += xp_amount
@@ -155,8 +162,39 @@ class EngagementCog(commands.Cog):
         if user_name:
             user_data["display_name"] = user_name
         
+        # Mettre à jour le streak
+        self._update_streak(user_data)
+        
+        # Vérifier si niveau up
+        new_level = calculate_level(user_data["xp"])
+        
         self._save_data()
-        return user_data
+        return user_data, old_level, new_level
+    
+    def _update_streak(self, user_data: dict):
+        """Met à jour le streak journalier de l'utilisateur."""
+        now = self._get_paris_now()
+        today = now.date()
+        
+        last_streak_str = user_data.get("last_streak_date")
+        if last_streak_str:
+            last_streak = datetime.fromisoformat(last_streak_str).date()
+            
+            # Si c'était hier, on incrémente
+            if last_streak == today - timedelta(days=1):
+                user_data["streak_days"] = user_data.get("streak_days", 0) + 1
+                user_data["last_streak_date"] = now.isoformat()
+            # Si c'était aujourd'hui, on ne fait rien (déjà compté)
+            elif last_streak == today:
+                pass
+            # Sinon (plus de 1 jour d'écart), on reset
+            else:
+                user_data["streak_days"] = 1
+                user_data["last_streak_date"] = now.isoformat()
+        else:
+            # Premier jour
+            user_data["streak_days"] = 1
+            user_data["last_streak_date"] = now.isoformat()
     
     def _reset_weekly(self, guild_id: int):
         """Reset les stats hebdomadaires pour un serveur."""
@@ -182,7 +220,11 @@ class EngagementCog(commands.Cog):
         
         # Ajouter XP (5-15 aléatoire)
         xp_gain = random.randint(XP_PER_MESSAGE_MIN, XP_PER_MESSAGE_MAX)
-        self._add_xp(guild_id, user_id, xp_gain, message.author.display_name)
+        user_data, old_level, new_level = self._add_xp(guild_id, user_id, xp_gain, message.author.display_name)
+        
+        # Si level up, envoyer un message de félicitations
+        if new_level > old_level:
+            await self._send_level_up_message(message.channel, message.author, new_level)
     
     @tasks.loop(minutes=1)
     async def weekly_ranking(self):
@@ -198,6 +240,35 @@ class EngagementCog(commands.Cog):
     @weekly_ranking.before_loop
     async def before_weekly_ranking(self):
         await self.bot.wait_until_ready()
+    
+    async def _send_level_up_message(self, channel, user, new_level: int):
+        """Envoie un message de félicitations pour un level up."""
+        messages = [
+            f"🎉 Félicitations {user.mention} ! Tu passes au **Niveau {new_level}** ! Continue comme ça !",
+            f"🚀 Wouah {user.mention} ! Niveau {new_level} atteint ! Tu progresses vite !",
+            f"⭐ Bravo {user.mention} ! Tu es maintenant au **Niveau {new_level}** !",
+            f"🎯 Incroyable {user.mention} ! Passage au Niveau {new_level} ! 🎊",
+            f"💪 Excellent {user.mention} ! Niveau {new_level} débloqué !",
+        ]
+        
+        # Messages spéciaux pour certains niveaux
+        if new_level == 5:
+            msg = f"🎉 {user.mention} atteint le **Niveau 5** ! Tu deviens un vrai habitué ! 🌟"
+        elif new_level == 10:
+            msg = f"🏆 {user.mention} passe au **Niveau 10** ! Tu es un membre d'exception ! ✨"
+        elif new_level == 25:
+            msg = f"👑 {user.mention} atteint le **Niveau 25** ! Légendaire ! 🔥"
+        elif new_level == 50:
+            msg = f"🌟 {user.mention} débloque le **Niveau 50** ! Tu es une légende vivante ! 👑"
+        elif new_level % 10 == 0:
+            msg = f"🎊 {user.mention} passe au **Niveau {new_level}** ! Un nouveau palier atteint ! 🚀"
+        else:
+            msg = random.choice(messages)
+        
+        try:
+            await channel.send(msg)
+        except:
+            pass  # Silencieux si erreur
     
     async def _get_display_name(self, guild, user_id: int, user_data: dict) -> str:
         """Récupère le nom d'affichage d'un utilisateur avec fallback."""
@@ -339,6 +410,13 @@ class EngagementCog(commands.Cog):
         embed.add_field(name="Messages", value=str(messages), inline=True)
         embed.add_field(name="XP Total", value=str(total_xp), inline=True)
         embed.add_field(name="XP Semaine", value=str(weekly_xp), inline=True)
+        
+        # Ajouter le streak (pour collecte de data)
+        streak_days = user_data.get("streak_days", 0)
+        if streak_days > 0:
+            streak_emoji = "🔥" if streak_days >= 7 else "⚡"
+            embed.add_field(name=f"{streak_emoji} Streak", value=f"{streak_days} jours", inline=True)
+        
         embed.add_field(name="Progression", value=f"{bar} {progress:.1f}%", inline=False)
         
         await ctx.send(embed=embed)

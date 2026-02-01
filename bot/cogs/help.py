@@ -42,9 +42,18 @@ class HelpCog(commands.Cog):
             name="✨ Features Automatiques",
             value="""
             Dis `gm` → Réponse personnalisée (1x/jour)
-            Parle → Gagne de l'XP automatiquement
+            Parle → Gagne de l'XP et monte en niveau !
+            Niveau up → Félicitations automatiques 🎉
+            `:hap:` ou `:noel:` → Réaction auto du bot
             Dimanche 20h → Classement hebdomadaire
             """,
+            inline=False
+        )
+        
+        # Tips
+        embed.add_field(
+            name="💡 Astuce",
+            value="Si tu fais une faute de frappe (ex: `o!classsement`), le bot te suggère la bonne commande !",
             inline=False
         )
         
