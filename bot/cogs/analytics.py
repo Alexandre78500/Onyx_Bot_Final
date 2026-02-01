@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 from collections import deque
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Set
@@ -36,6 +37,24 @@ COMMON_WORDS = {
     "ont", "été", "être", "avoir", "faire", "plus", "moins", "très", "trop", "peu",
     "bien", "mal", "oui", "non", "si", "pas", "ne", "au", "aux", "ça", "ca"
 }
+
+CUSTOM_EMOJI_RE = re.compile(r"<a?:([A-Za-z0-9_]+):\d+>")
+UNICODE_EMOJI_RE = re.compile(
+    "["
+    "\U0001F300-\U0001F5FF"
+    "\U0001F600-\U0001F64F"
+    "\U0001F680-\U0001F6FF"
+    "\U0001F700-\U0001F77F"
+    "\U0001F780-\U0001F7FF"
+    "\U0001F800-\U0001F8FF"
+    "\U0001F900-\U0001F9FF"
+    "\U0001FA00-\U0001FA6F"
+    "\U0001FA70-\U0001FAFF"
+    "\U00002700-\U000027BF"
+    "\U00002600-\U000026FF"
+    "]",
+    re.UNICODE,
+)
 
 # Cache pour conversations: garde les 20 derniers messages par canal (max 10 min)
 MESSAGE_CACHE_SIZE = ANALYTICS_MESSAGE_CACHE_SIZE
@@ -151,9 +170,18 @@ class AnalyticsCog(commands.Cog):
                 "messages_total": 0,
                 "messages_by_day": [0] * 7,  # Lundi=0, Dimanche=6
                 "messages_by_hour": [0] * 24,  # 00h-23h
+                "messages_by_segment": {
+                    "night": 0,
+                    "morning": 0,
+                    "afternoon": 0,
+                    "evening": 0
+                },
                 "unique_users": [],  # Stocké comme liste pour JSON, mais on utilise des sets en mémoire
                 "unique_channels": [],
                 "word_counts": {},
+                "emoji_text_usage": {
+                    "users": {}
+                },
                 "conversations": {},  # "userA_userB": count
                 "mentions_graph": {
                     "given": {},  # user: {target: count}
@@ -227,6 +255,10 @@ class AnalyticsCog(commands.Cog):
         stats["messages_total"] += 1
         stats["messages_by_day"][now.weekday()] += 1
         stats["messages_by_hour"][now.hour] += 1
+        if "messages_by_segment" not in stats:
+            stats["messages_by_segment"] = {"night": 0, "morning": 0, "afternoon": 0, "evening": 0}
+        segment = self._get_time_segment(now.hour)
+        stats["messages_by_segment"][segment] = stats["messages_by_segment"].get(segment, 0) + 1
         
         # 2. Utilisateurs uniques (utilisation de set pour O(1))
         if author_id not in self._unique_users_cache[guild_id]:
@@ -244,6 +276,16 @@ class AnalyticsCog(commands.Cog):
             for word in words:
                 if word not in COMMON_WORDS and len(word) >= 3:
                     stats["word_counts"][word] = stats["word_counts"].get(word, 0) + 1
+
+        # 4b. Emojis texte (par utilisateur)
+        if message.content:
+            emojis = self._extract_text_emojis(message.content)
+            if emojis:
+                if "emoji_text_usage" not in stats:
+                    stats["emoji_text_usage"] = {"users": {}}
+                user_emojis = stats["emoji_text_usage"]["users"].setdefault(author_id, {})
+                for emoji in emojis:
+                    user_emojis[emoji] = user_emojis.get(emoji, 0) + 1
         
         # 5. Mentions
         if message.mentions:
@@ -284,6 +326,28 @@ class AnalyticsCog(commands.Cog):
         # Split et filtrer
         words = [w.strip() for w in text.split() if w.strip()]
         return words
+
+    def _get_time_segment(self, hour: int) -> str:
+        """Retourne la tranche horaire (night, morning, afternoon, evening)."""
+        if 0 <= hour <= 5:
+            return "night"
+        if 6 <= hour <= 11:
+            return "morning"
+        if 12 <= hour <= 17:
+            return "afternoon"
+        return "evening"
+
+    def _extract_text_emojis(self, text: str) -> List[str]:
+        """Extrait les emojis du texte (unicode + custom)."""
+        emojis: List[str] = []
+        if not text:
+            return emojis
+
+        for name in CUSTOM_EMOJI_RE.findall(text):
+            emojis.append(f":{name}:")
+
+        emojis.extend(UNICODE_EMOJI_RE.findall(text))
+        return emojis
     
     def _detect_conversation(self, message, guild_data: Dict, author_id: str, channel_id: str, timestamp: datetime):
         """Détecte si le message est une réponse (référence si dispo, sinon cache)."""

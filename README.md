@@ -36,8 +36,10 @@ Bot Discord complet avec système de rêves lucides, engagement utilisateur et a
 ### 📈 Analytics Complètes
 Collecte automatique à chaque message :
 - **Stats temporelles** : Messages par jour de la semaine (7 valeurs) et par heure (24 valeurs)
+- **Tranches horaires** : Activite par segments (nuit, matin, apres-midi, soir)
 - **Word count** : Top mots utilisés sur le serveur (exclut les mots communs)
 - **Top 50 mots** : Nettoyage automatique 1x/jour pour garder les 50 mots les plus frequents
+- **Emojis texte favoris** : Top emojis par utilisateur (uniquement dans le texte)
 - **Graphe de conversations** : Qui répond à qui (réponses explicites si dispo, sinon messages < 5 min)
 - **Graphe de mentions** : Qui mentionne qui fréquemment
 - **Stats réactions** : Nombre total de réactions et par emoji
@@ -114,9 +116,13 @@ gm_data.json             # Données GM par serveur
       "messages_total": 1250,
       "messages_by_day": [45, 32, 67, 89, 120, 200, 150],
       "messages_by_hour": [0,0,0,0,2,5,12,45,89,120...],
+      "messages_by_segment": {"night": 12, "morning": 120, "afternoon": 340, "evening": 778},
       "unique_users": ["user_id_1", "user_id_2"],
       "unique_channels": ["channel_id_1"],
       "word_counts": {"rêve": 150, "technique": 89, "fille": 45},
+      "emoji_text_usage": {
+        "users": {"user_id_1": {"😀": 12, ":hap:": 4}}
+      },
       "conversations": {"user1_user2": 15, "user1_user3": 8},
       "mentions_graph": {
         "given": {"user1": {"user2": 5}},
@@ -135,8 +141,10 @@ gm_data.json             # Données GM par serveur
 **Champs importants :**
 - `messages_by_day[0-6]` : Lundi (0) à Dimanche (6)
 - `messages_by_hour[0-23]` : 00h à 23h
+- `messages_by_segment` : Activite par tranches (night, morning, afternoon, evening)
 - `conversations["userA_userB"]` : Nombre de réponses entre ces deux users
 - `word_counts` : Tous les mots (≥3 lettres, hors mots communs) avec leur fréquence
+- `emoji_text_usage.users` : Emojis utilises dans le texte par utilisateur
 - `_meta.guilds` : Optionnel (liste ou dict historique, non critique pour la migration)
 - `_meta.last_word_prune` : Derniere date de nettoyage du top 50
 
