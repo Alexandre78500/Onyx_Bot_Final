@@ -17,23 +17,35 @@ class LucidCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="conseil", description="Obtenir un conseil pour faire des rêves lucides")
-    async def conseil(self, interaction: Interaction):
+    @commands.command(name="conseil", aliases=["tip", "astuce"])
+    async def conseil_prefix(self, ctx):
+        """Obtenir un conseil pour faire des rêves lucides"""
         conseil = random.choice(CONSEILS_REVE_LUCIDE)
-        await interaction.response.send_message(f"💡 Conseil : {conseil}")
+        await ctx.send(f"💡 **Conseil rêve lucide :** {conseil}")
 
-    @app_commands.command(name="journal", description="Sauvegarder une note de rêve")
-    @app_commands.describe(entree="Ton entrée de rêve")
-    async def journal(self, interaction: Interaction, entree: str):
-        await interaction.response.send_message(
-            "📝 Note sauvegardée (localement pour l'instant).", ephemeral=True
-        )
+    @commands.command(name="ressource", aliases=["lien", "resources"])
+    async def ressource_prefix(self, ctx):
+        """Partager une ressource utile sur les rêves lucides"""
+        await ctx.send("📚 **Ressources rêves lucides :** https://fr.wikipedia.org/wiki/Rêve_lucide")
 
-    @app_commands.command(name="ressource", description="Partager une ressource utile")
-    async def ressource(self, interaction: Interaction):
-        await interaction.response.send_message(
-            "📚 Ressource : https://fr.wikipedia.org/wiki/Rêve_lucide"
-        )
+    # Slash commands désactivés pour l'instant
+    # @app_commands.command(name="conseil", description="Obtenir un conseil pour faire des rêves lucides")
+    # async def conseil(self, interaction: Interaction):
+    #     conseil = random.choice(CONSEILS_REVE_LUCIDE)
+    #     await interaction.response.send_message(f"💡 Conseil : {conseil}")
+    #
+    # @app_commands.command(name="journal", description="Sauvegarder une note de rêve")
+    # @app_commands.describe(entree="Ton entrée de rêve")
+    # async def journal(self, interaction: Interaction, entree: str):
+    #     await interaction.response.send_message(
+    #         "📝 Note sauvegardée (localement pour l'instant).", ephemeral=True
+    #     )
+    #
+    # @app_commands.command(name="ressource", description="Partager une ressource utile")
+    # async def ressource(self, interaction: Interaction):
+    #     await interaction.response.send_message(
+    #         "📚 Ressource : https://fr.wikipedia.org/wiki/Rêve_lucide"
+    #     )
 
 
 async def setup(bot: commands.Bot):
