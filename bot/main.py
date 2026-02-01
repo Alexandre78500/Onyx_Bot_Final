@@ -29,10 +29,6 @@ class LucidBot(commands.Bot):
             await self.tree.sync(guild=guild)
         else:
             await self.tree.sync()
-            # Synchronisation immédiate pour ton gros serveur
-            big_guild = Object(id=376777553945296896)
-            self.tree.copy_global_to(guild=big_guild)
-            await self.tree.sync(guild=big_guild)
 
     async def on_ready(self):
         logging.info("Logged in as %s (id=%s)", self.user, self.user.id)
