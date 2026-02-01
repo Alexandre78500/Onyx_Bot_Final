@@ -254,340 +254,179 @@ class EngagementCog(commands.Cog):
         }
 
     async def _build_profile_card(self, user, user_data: EngagementUser, analytics_data: dict) -> BytesIO:
-        """Genere une carte profil PNG en memoire avec un design moderne."""
-        width, height = 900, 500
+        """Genere une carte profil PNG compacte et sobre."""
+        # Dimensions compactes
+        width, height = 800, 280
         
-        # Créer l'image de base avec gradient diagonal sophistiqué
-        image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        # Fond sombre uni et sobre
+        image = Image.new("RGB", (width, height), (26, 28, 44))
+        draw = ImageDraw.Draw(image)
         
-        # Fond avec gradient diagonal bleu-violet
+        # Gradient vertical subtil
         for y in range(height):
-            for x in range(width):
-                # Gradient diagonal
-                gradient_factor = (x + y) / (width + height)
-                
-                # Couleurs: bleu foncé -> violet -> bleu clair
-                r = int(15 + 85 * gradient_factor + 20 * (x / width))
-                g = int(20 + 60 * gradient_factor)
-                b = int(50 + 120 * gradient_factor)
-                
-                # Ajouter un peu de variation
-                noise = (x * y) % 15 - 7
-                r = max(0, min(255, r + noise))
-                g = max(0, min(255, g + noise))
-                b = max(0, min(255, b + noise))
-                
-                image.putpixel((x, y), (r, g, b, 255))
+            factor = y / height
+            r = int(26 + 8 * factor)
+            g = int(28 + 8 * factor)
+            b = int(44 + 12 * factor)
+            draw.line([(0, y), (width, y)], fill=(r, g, b))
         
-        draw = ImageDraw.Draw(image, "RGBA")
-        
-        # Overlay semi-transparent pour adoucir
-        overlay = Image.new("RGBA", (width, height), (10, 15, 35, 120))
-        image = Image.alpha_composite(image, overlay)
-        draw = ImageDraw.Draw(image, "RGBA")
-        
-        # Panel principal avec effet de verre
-        main_panel_coords = (20, 20, width - 20, height - 20)
-        # Ombre du panel
-        draw.rounded_rectangle(
-            (24, 24, width - 16, height - 16),
-            radius=28,
-            fill=(0, 0, 0, 80)
-        )
-        # Panel avec transparence
-        draw.rounded_rectangle(
-            main_panel_coords,
-            radius=28,
-            fill=(15, 20, 40, 200)
-        )
-        # Bordure brillante
-        draw.rounded_rectangle(
-            main_panel_coords,
-            radius=28,
-            outline=(100, 150, 255, 100),
-            width=2
-        )
-        
-        # Section header (avatar + infos principales)
-        header_coords = (40, 40, width - 40, 200)
-        draw.rounded_rectangle(
-            header_coords,
-            radius=20,
-            fill=(20, 30, 60, 150)
-        )
-        # Bordure subtile
-        draw.rounded_rectangle(
-            header_coords,
-            radius=20,
-            outline=(80, 120, 200, 80),
-            width=1
-        )
-        
-        # Avatar avec bordure brillante et ombre
-        avatar_bytes = await user.display_avatar.read()
-        avatar_size = 130
-        avatar = Image.open(BytesIO(avatar_bytes)).convert("RGBA").resize((avatar_size, avatar_size), Image.Resampling.LANCZOS)
-        
-        # Créer le masque circulaire
-        mask = Image.new("L", (avatar_size, avatar_size), 0)
-        mask_draw = ImageDraw.Draw(mask)
-        mask_draw.ellipse((0, 0, avatar_size, avatar_size), fill=255)
-        
-        # Ombre de l'avatar
-        shadow_offset = 8
-        draw.ellipse(
-            (60 + shadow_offset, 60 + shadow_offset, 60 + avatar_size + shadow_offset, 60 + avatar_size + shadow_offset),
-            fill=(0, 0, 0, 100)
-        )
-        
-        # Bordure dorée autour de l'avatar
-        border_size = 6
-        draw.ellipse(
-            (60 - border_size, 60 - border_size, 60 + avatar_size + border_size, 60 + avatar_size + border_size),
-            outline=(255, 215, 0, 255),
-            width=border_size
-        )
-        
-        # Coller l'avatar
-        avatar_pos = (60, 60)
-        image.paste(avatar, avatar_pos, mask)
-        
-        # Charger les polices (avec fallback sur default)
+        # Charger polices
         try:
-            title_font = ImageFont.truetype("arial.ttf", 32)
-            subtitle_font = ImageFont.truetype("arial.ttf", 20)
-            small_font = ImageFont.truetype("arial.ttf", 16)
-            tiny_font = ImageFont.truetype("arial.ttf", 14)
+            name_font = ImageFont.truetype("arial.ttf", 28)
+            level_font = ImageFont.truetype("arial.ttf", 22)
+            label_font = ImageFont.truetype("arial.ttf", 13)
+            value_font = ImageFont.truetype("arial.ttf", 16)
+            small_font = ImageFont.truetype("arial.ttf", 12)
         except:
-            title_font = ImageFont.load_default()
-            subtitle_font = ImageFont.load_default()
+            name_font = ImageFont.load_default()
+            level_font = ImageFont.load_default()
+            label_font = ImageFont.load_default()
+            value_font = ImageFont.load_default()
             small_font = ImageFont.load_default()
-            tiny_font = ImageFont.load_default()
         
-        # Calculer les stats
+        # Calculer stats
         total_xp = user_data.get("xp", 0)
         weekly_xp = user_data.get("weekly_xp", 0)
         level = calculate_level(total_xp)
         progress, _ = get_level_progress(total_xp)
         streak_days = user_data.get("streak_days", 0)
         
-        # Nom d'utilisateur avec ombre
-        username = user.display_name
-        username_x, username_y = 220, 65
-        # Ombre du texte
-        draw.text((username_x + 2, username_y + 2), username, font=title_font, fill=(0, 0, 0, 150))
-        # Texte principal avec dégradé simulé
-        draw.text((username_x, username_y), username, font=title_font, fill=(255, 255, 255, 255))
-        
-        # Badge de niveau avec design moderne
-        level_badge_x = 220
-        level_badge_y = 110
-        badge_width = 100
-        badge_height = 40
-        
-        # Fond du badge avec gradient
-        draw.rounded_rectangle(
-            (level_badge_x, level_badge_y, level_badge_x + badge_width, level_badge_y + badge_height),
-            radius=20,
-            fill=(255, 215, 0, 220)
-        )
-        # Bordure brillante
-        draw.rounded_rectangle(
-            (level_badge_x, level_badge_y, level_badge_x + badge_width, level_badge_y + badge_height),
-            radius=20,
-            outline=(255, 255, 150, 200),
-            width=2
-        )
-        
-        # Texte du niveau
-        level_text = f"NIV {level}"
-        # Centrer le texte dans le badge
-        bbox = draw.textbbox((0, 0), level_text, font=subtitle_font)
-        text_width = bbox[2] - bbox[0]
-        text_height = bbox[3] - bbox[1]
-        text_x = level_badge_x + (badge_width - text_width) // 2
-        text_y = level_badge_y + (badge_height - text_height) // 2 - 2
-        draw.text((text_x, text_y), level_text, font=subtitle_font, fill=(40, 20, 0, 255))
-        
-        # XP info
-        xp_text = f"{total_xp:,} XP Total"
-        draw.text((340, 115), xp_text, font=small_font, fill=(200, 220, 255, 255))
-        
-        weekly_text = f"Cette semaine: {weekly_xp:,} XP"
-        draw.text((340, 138), weekly_text, font=tiny_font, fill=(160, 180, 220, 255))
-        
-        # Barre de progression stylée
-        bar_x, bar_y = 220, 168
-        bar_w, bar_h = width - 260, 18
-        
-        # Fond de la barre avec ombre interne
-        draw.rounded_rectangle(
-            (bar_x, bar_y, bar_x + bar_w, bar_y + bar_h),
-            radius=9,
-            fill=(20, 30, 50, 200)
-        )
-        
-        # Remplissage avec gradient
-        fill_w = int(bar_w * (progress / 100))
-        if fill_w > 0:
-            # Créer un effet de gradient sur la barre
-            for i in range(max(fill_w, 10)):
-                progress_factor = i / bar_w
-                r = int(80 + 175 * progress_factor)
-                g = int(200 - 50 * progress_factor)
-                b = int(255 - 105 * progress_factor)
-                draw.rectangle(
-                    (bar_x + i, bar_y + 2, bar_x + i + 1, bar_y + bar_h - 2),
-                    fill=(r, g, b, 255)
-                )
-            
-            # Bordure brillante sur la partie remplie
-            draw.rounded_rectangle(
-                (bar_x, bar_y, bar_x + max(fill_w, 18), bar_y + bar_h),
-                radius=9,
-                outline=(150, 255, 200, 150),
-                width=1
-            )
-        
-        # Pourcentage
-        percent_text = f"{progress:.1f}%"
-        draw.text((bar_x + bar_w + 10, bar_y + 1), percent_text, font=small_font, fill=(200, 220, 255, 255))
-        
-        # Section analytics avec cartes stylées
-        analytics_y = 220
-        
-        # Analytics data
+        # Analytics
         emoji_usage = analytics_data.get("emoji_usage", {})
         word_counts = analytics_data.get("word_counts", {})
         segments = analytics_data.get("segments", {})
         
         top_emojis = sorted(emoji_usage.items(), key=lambda item: (-item[1], item[0]))[:3]
-        top_words = sorted(word_counts.items(), key=lambda item: (-item[1], item[0]))[:5]
+        top_words = sorted(word_counts.items(), key=lambda item: (-item[1], item[0]))[:3]
         
-        segment_labels = {
-            "night": "Nuit",
-            "morning": "Matin",
-            "afternoon": "Apres-midi",
-            "evening": "Soir",
-        }
-        dominant_label = "-"
-        dominant_emoji = "🌙"
+        segment_labels = {"night": "Nuit", "morning": "Matin", "afternoon": "Apres-midi", "evening": "Soir"}
+        segment_icons = {"night": "🌙", "morning": "☀️", "afternoon": "🌤️", "evening": "🌆"}
+        
+        dominant_label = "N/A"
+        dominant_icon = ""
         if segments:
-            dominant_segment = max(segments.items(), key=lambda item: item[1])[0]
-            dominant_label = segment_labels.get(dominant_segment, "-")
-            segment_emojis = {
-                "night": "🌙",
-                "morning": "☀️",
-                "afternoon": "🌤️",
-                "evening": "🌆"
-            }
-            dominant_emoji = segment_emojis.get(dominant_segment, "🌙")
+            dominant_segment = max(segments.items(), key=lambda x: x[1])[0]
+            dominant_label = segment_labels.get(dominant_segment, "N/A")
+            dominant_icon = segment_icons.get(dominant_segment, "")
         
-        # Créer 4 cartes d'analytics
-        card_width = 200
-        card_height = 110
-        card_spacing = 15
-        cards_per_row = 4
+        # Panel principal
+        panel_margin = 16
+        draw.rounded_rectangle(
+            [(panel_margin, panel_margin), (width - panel_margin, height - panel_margin)],
+            radius=16,
+            fill=(35, 38, 58),
+            outline=(65, 70, 95),
+            width=2
+        )
         
-        card_data = [
-            {
-                "title": "TOP EMOJIS",
-                "value": " ".join([emoji for emoji, _ in top_emojis]) if top_emojis else "—",
-                "icon": "😀",
-                "color": (255, 100, 150)
-            },
-            {
-                "title": "STREAK",
-                "value": f"{streak_days} jours",
-                "icon": "🔥",
-                "color": (255, 150, 50)
-            },
-            {
-                "title": "PERIODE",
-                "value": dominant_label,
-                "icon": dominant_emoji,
-                "color": (100, 200, 255)
-            },
-            {
-                "title": "TOP MOTS",
-                "value": ", ".join([word for word, _ in top_words[:3]]) if top_words else "—",
-                "icon": "💬",
-                "color": (150, 100, 255)
-            }
+        # --- SECTION GAUCHE: Avatar + Niveau ---
+        avatar_size = 100
+        avatar_x, avatar_y = 30, 30
+        
+        # Avatar
+        avatar_bytes = await user.display_avatar.read()
+        avatar = Image.open(BytesIO(avatar_bytes)).convert("RGBA").resize((avatar_size, avatar_size), Image.Resampling.LANCZOS)
+        mask = Image.new("L", (avatar_size, avatar_size), 0)
+        ImageDraw.Draw(mask).ellipse([(0, 0), (avatar_size, avatar_size)], fill=255)
+        
+        # Bordure avatar simple
+        border_color = (100, 180, 255)
+        draw.ellipse(
+            [(avatar_x - 3, avatar_y - 3), (avatar_x + avatar_size + 3, avatar_y + avatar_size + 3)],
+            outline=border_color,
+            width=3
+        )
+        
+        image.paste(avatar, (avatar_x, avatar_y), mask)
+        
+        # Badge niveau compact sous l'avatar
+        badge_y = avatar_y + avatar_size + 12
+        badge_w, badge_h = 100, 32
+        badge_x = avatar_x
+        
+        draw.rounded_rectangle(
+            [(badge_x, badge_y), (badge_x + badge_w, badge_y + badge_h)],
+            radius=16,
+            fill=(255, 200, 50),
+        )
+        
+        level_text = f"NIV {level}"
+        bbox = draw.textbbox((0, 0), level_text, font=level_font)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+        draw.text(
+            (badge_x + (badge_w - text_w) // 2, badge_y + (badge_h - text_h) // 2 - 2),
+            level_text,
+            font=level_font,
+            fill=(30, 30, 30)
+        )
+        
+        # --- SECTION DROITE: Info utilisateur ---
+        info_x = avatar_x + avatar_size + 24
+        info_y = 40
+        
+        # Nom
+        draw.text((info_x, info_y), user.display_name, font=name_font, fill=(255, 255, 255))
+        
+        # XP Total
+        info_y += 38
+        draw.text((info_x, info_y), f"{total_xp:,} XP Total", font=value_font, fill=(200, 210, 230))
+        
+        # XP Semaine
+        info_y += 24
+        draw.text((info_x, info_y), f"Cette semaine: {weekly_xp:,} XP", font=small_font, fill=(150, 160, 180))
+        
+        # Barre de progression
+        info_y += 28
+        bar_w = 450
+        bar_h = 14
+        bar_x = info_x
+        
+        # Fond barre
+        draw.rounded_rectangle(
+            [(bar_x, info_y), (bar_x + bar_w, info_y + bar_h)],
+            radius=7,
+            fill=(50, 55, 75)
+        )
+        
+        # Remplissage
+        fill_w = int(bar_w * (progress / 100))
+        if fill_w > 0:
+            draw.rounded_rectangle(
+                [(bar_x, info_y), (bar_x + max(fill_w, 14), info_y + bar_h)],
+                radius=7,
+                fill=(100, 180, 255)
+            )
+        
+        # Pourcentage
+        percent_text = f"{progress:.0f}%"
+        draw.text((bar_x + bar_w + 8, info_y - 1), percent_text, font=small_font, fill=(180, 190, 210))
+        
+        # --- SECTION BAS: Stats compactes ---
+        stats_y = info_y + 34
+        stat_spacing = 142
+        
+        stats = [
+            ("TOP EMOJIS", " ".join([e for e, _ in top_emojis]) if top_emojis else "—"),
+            ("STREAK", f"🔥 {streak_days}j"),
+            ("PERIODE", f"{dominant_icon} {dominant_label}"),
+            ("TOP MOTS", ", ".join([w for w, _ in top_words]) if top_words else "—"),
         ]
         
-        start_x = 40
-        for i, card in enumerate(card_data):
-            card_x = start_x + i * (card_width + card_spacing)
-            card_y = analytics_y
+        for i, (label, value) in enumerate(stats):
+            stat_x = info_x + i * stat_spacing
             
-            # Ombre de la carte
-            draw.rounded_rectangle(
-                (card_x + 3, card_y + 3, card_x + card_width + 3, card_y + card_height + 3),
-                radius=12,
-                fill=(0, 0, 0, 80)
-            )
+            # Label
+            draw.text((stat_x, stats_y), label, font=label_font, fill=(120, 130, 150))
             
-            # Fond de la carte
-            draw.rounded_rectangle(
-                (card_x, card_y, card_x + card_width, card_y + card_height),
-                radius=12,
-                fill=(25, 35, 65, 180)
-            )
-            
-            # Accent coloré en haut
-            accent_height = 4
-            for j in range(card_width):
-                alpha_factor = 1 - abs(j - card_width/2) / (card_width/2)
-                color_with_alpha = card["color"] + (int(200 * alpha_factor),)
-                draw.rectangle(
-                    (card_x + j, card_y, card_x + j + 1, card_y + accent_height),
-                    fill=color_with_alpha
-                )
-            
-            # Bordure subtile
-            draw.rounded_rectangle(
-                (card_x, card_y, card_x + card_width, card_y + card_height),
-                radius=12,
-                outline=(80, 100, 150, 100),
-                width=1
-            )
-            
-            # Titre de la carte
-            draw.text(
-                (card_x + 12, card_y + 15),
-                card["title"],
-                font=tiny_font,
-                fill=(150, 160, 200, 255)
-            )
-            
-            # Valeur principale
-            value_text = card["value"]
-            # Limiter la longueur pour éviter le débordement
-            if len(value_text) > 18:
-                value_text = value_text[:15] + "..."
-            
-            draw.text(
-                (card_x + 12, card_y + 45),
-                value_text,
-                font=subtitle_font,
-                fill=(255, 255, 255, 255)
-            )
-            
-            # Icône en haut à droite
-            draw.text(
-                (card_x + card_width - 35, card_y + 12),
-                card["icon"],
-                font=subtitle_font,
-                fill=(255, 255, 255, 200)
-            )
+            # Valeur (tronquer si trop long)
+            if len(value) > 12:
+                value = value[:10] + "..."
+            draw.text((stat_x, stats_y + 18), value, font=value_font, fill=(220, 230, 250))
         
-        # Convertir en mode RGB pour sauvegarder en PNG
-        final_image = Image.new("RGB", (width, height), (15, 18, 28))
-        final_image.paste(image, (0, 0), image)
-        
+        # Sauvegarder
         output = BytesIO()
-        final_image.save(output, format="PNG", optimize=True)
+        image.save(output, format="PNG", optimize=True, quality=95)
         output.seek(0)
         return output
     
