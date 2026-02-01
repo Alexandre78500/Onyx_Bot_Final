@@ -37,6 +37,7 @@ Bot Discord complet avec système de rêves lucides, engagement utilisateur et a
 Collecte automatique à chaque message :
 - **Stats temporelles** : Messages par jour de la semaine (7 valeurs) et par heure (24 valeurs)
 - **Word count** : Top mots utilisés sur le serveur (exclut les mots communs)
+- **Top 50 mots** : Nettoyage automatique 1x/jour pour garder les 50 mots les plus frequents
 - **Graphe de conversations** : Qui répond à qui (réponses explicites si dispo, sinon messages < 5 min)
 - **Graphe de mentions** : Qui mentionne qui fréquemment
 - **Stats réactions** : Nombre total de réactions et par emoji
@@ -105,7 +106,8 @@ gm_data.json             # Données GM par serveur
     "schema_version": 1,
     "created_at": "2026-02-01T20:00:00",
     "last_migration": "2026-02-01T20:00:00",
-    "guilds": ["123456789"]
+    "guilds": ["123456789"],
+    "last_word_prune": "2026-02-01"
   },
   "123456789": {
     "global_stats": {
@@ -136,6 +138,7 @@ gm_data.json             # Données GM par serveur
 - `conversations["userA_userB"]` : Nombre de réponses entre ces deux users
 - `word_counts` : Tous les mots (≥3 lettres, hors mots communs) avec leur fréquence
 - `_meta.guilds` : Optionnel (liste ou dict historique, non critique pour la migration)
+- `_meta.last_word_prune` : Derniere date de nettoyage du top 50
 
 ### 2. `data/messages_archive_v1.jsonl`
 **Format** : JSON Lines (1 ligne = 1 message JSON)

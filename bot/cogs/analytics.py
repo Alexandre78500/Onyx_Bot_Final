@@ -14,6 +14,7 @@ from bot.constants import (
     ANALYTICS_MESSAGE_CACHE_SIZE,
     ANALYTICS_MESSAGE_CACHE_TTL_SECONDS,
     ANALYTICS_SAVE_INTERVAL_MINUTES,
+    ANALYTICS_WORD_COUNT_TOP_N,
 )
 
 # Configuration
@@ -99,7 +100,8 @@ class AnalyticsCog(commands.Cog):
                 "schema_version": CURRENT_SCHEMA_VERSION,
                 "created_at": datetime.now().isoformat(),
                 "last_migration": datetime.now().isoformat(),
-                "guilds": {}
+                "guilds": {},
+                "last_word_prune": None
             },
             "_schema_history": []
         }
@@ -339,6 +341,28 @@ class AnalyticsCog(commands.Cog):
         # Flush si buffer plein
         if len(self.archive_buffer) >= ARCHIVE_BUFFER_SIZE:
             asyncio.create_task(self._flush_archive())
+
+    def _prune_word_counts_if_needed(self):
+        """Garde uniquement le top N des mots une fois par jour."""
+        today = datetime.now().date().isoformat()
+        last_prune = self.data.get("_meta", {}).get("last_word_prune")
+        if last_prune == today:
+            return
+
+        for guild_id, guild_data in self.data.items():
+            if guild_id.startswith("_"):
+                continue
+            stats = guild_data.get("global_stats", {})
+            word_counts = stats.get("word_counts", {})
+            if not word_counts:
+                continue
+
+            # Trier par occurrences (desc), puis par mot (asc) pour stabilite
+            top_items = sorted(word_counts.items(), key=lambda item: (-item[1], item[0]))
+            top_items = top_items[:ANALYTICS_WORD_COUNT_TOP_N]
+            stats["word_counts"] = {word: count for word, count in top_items}
+
+        self.data["_meta"]["last_word_prune"] = today
     
     @commands.Cog.listener()
     async def on_reaction_add(self, reaction: Reaction, user: User):
@@ -376,6 +400,7 @@ class AnalyticsCog(commands.Cog):
     async def _force_save(self):
         """Force la sauvegarde immédiate des données."""
         try:
+            self._prune_word_counts_if_needed()
             await self._save_data_async()
             await self._flush_archive()
             self.last_save = datetime.now()
