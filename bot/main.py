@@ -18,6 +18,7 @@ logging.basicConfig(
 class LucidBot(commands.Bot):
     def __init__(self):
         intents = Intents.default()
+        intents.message_content = True  # Nécessaire pour lire les messages (GM)
         super().__init__(command_prefix="!", intents=intents)
 
     async def setup_hook(self):
