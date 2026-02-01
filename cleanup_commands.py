@@ -4,6 +4,7 @@ Script pour supprimer les commandes slash en double d'un serveur spécifique.
 """
 import asyncio
 import os
+import discord
 from discord import Object
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -16,7 +17,8 @@ GUILD_ID = 376777553945296896  # Ton gros serveur
 
 class CleanupBot(commands.Bot):
     def __init__(self):
-        super().__init__(command_prefix="!")
+        intents = discord.Intents.default()
+        super().__init__(command_prefix="!", intents=intents)
 
     async def setup_hook(self):
         guild = Object(id=GUILD_ID)
