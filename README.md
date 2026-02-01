@@ -24,7 +24,8 @@ Bot Discord complet avec système de rêves lucides, engagement utilisateur et a
 - **Gain d'XP automatique** : 5-15 XP par message (cooldown 15s)
 - **Niveaux progressifs** : Algorithmes de niveau avec courbe d'XP croissante
 - **Félicitations automatiques** : Messages de félicitations quand on monte de niveau
-- **Classement** : `o!rang` (profil perso) et `o!classement` (top 10 serveur)
+- **Carte profil** : `o!profil` genere une carte image (niveau, XP, emojis, mots, tranche)
+- **Classement** : `o!profil` (carte profil) et `o!classement` (top 10 serveur)
 - **Streak journalier** : Nombre de jours consécutifs d'activité
 - **Classement hebdomadaire** : Post automatique le dimanche à 20h
 
@@ -266,12 +267,12 @@ sudo journalctl -u discord-bot.service -f
 - `o!ressource` / `o!lien` - Ressources sur les rêves lucides
 
 ### Commandes Engagement
-- `o!rang` / `o!stats` - Voir ton profil (niveau, XP, position, streak)
+- `o!profil` / `o!rang` / `o!stats` - Carte profil (niveau, XP, emojis, mots, tranche)
 - `o!classement` / `o!top` - Top 10 du serveur
 
 ### Aliases disponibles
 Chaque commande a plusieurs aliases pour être facilement trouvée :
-- `rang` : rank, stats, profil, niveau
+- `profil` : rang, rank, stats, niveau
 - `classement` : ranking, top, leaderboard, top10
 - `conseil` : tip, astuce
 - `ressource` : lien, resources

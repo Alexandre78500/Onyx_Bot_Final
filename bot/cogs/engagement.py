@@ -4,11 +4,13 @@ import logging
 import os
 import random
 from datetime import datetime, timedelta
+from io import BytesIO
 from typing import TypedDict
 
 import pytz
-from discord import Embed
+from discord import Embed, File
 from discord.ext import commands, tasks
+from PIL import Image, ImageDraw, ImageFont
 
 from bot.constants import (
     ENGAGEMENT_COOLDOWN_SECONDS,
@@ -226,6 +228,121 @@ class EngagementCog(commands.Cog):
         self._dirty = True
         
         return user_data, old_level, new_level
+
+    def _get_analytics_snapshot(self, guild_id: int, user_id: int) -> dict:
+        """Retourne les donnees analytics utiles pour la carte profil."""
+        analytics = self.bot.get_cog("AnalyticsCog")
+        if not analytics:
+            return {}
+
+        try:
+            guild_data = analytics._get_guild_data(str(guild_id))
+        except Exception:
+            return {}
+
+        stats = guild_data.get("global_stats", {})
+        user_id_str = str(user_id)
+
+        emoji_usage = stats.get("emoji_text_usage", {}).get("users", {}).get(user_id_str, {})
+        word_counts = stats.get("word_counts", {})
+        segments = stats.get("messages_by_segment", {})
+
+        return {
+            "emoji_usage": emoji_usage,
+            "word_counts": word_counts,
+            "segments": segments,
+        }
+
+    async def _build_profile_card(self, user, user_data: EngagementUser, analytics_data: dict) -> BytesIO:
+        """Genere une carte profil PNG en memoire."""
+        width, height = 720, 420
+        image = Image.new("RGB", (width, height), (15, 18, 28))
+        draw = ImageDraw.Draw(image)
+
+        # Gradient simple
+        for y in range(height):
+            r = 15 + int(30 * (y / height))
+            g = 18 + int(40 * (y / height))
+            b = 28 + int(60 * (y / height))
+            draw.line((0, y, width, y), fill=(r, g, b))
+
+        # Panels
+        draw.rounded_rectangle((24, 24, width - 24, height - 24), radius=24, fill=(20, 24, 38))
+        draw.rounded_rectangle((32, 32, width - 32, 170), radius=20, fill=(24, 30, 48))
+        draw.rounded_rectangle((32, 182, width - 32, height - 32), radius=20, fill=(24, 30, 48))
+
+        # Avatar cercle
+        avatar_bytes = await user.display_avatar.read()
+        avatar = Image.open(BytesIO(avatar_bytes)).convert("RGBA").resize((110, 110))
+        mask = Image.new("L", (110, 110), 0)
+        mask_draw = ImageDraw.Draw(mask)
+        mask_draw.ellipse((0, 0, 110, 110), fill=255)
+        image.paste(avatar, (52, 46), mask)
+
+        # Fonts
+        title_font = ImageFont.load_default()
+        small_font = ImageFont.load_default()
+
+        # Header text
+        draw.text((180, 52), f"{user.display_name}", font=title_font, fill=(236, 242, 255))
+
+        total_xp = user_data.get("xp", 0)
+        weekly_xp = user_data.get("weekly_xp", 0)
+        level = calculate_level(total_xp)
+        progress, _ = get_level_progress(total_xp)
+
+        draw.text((180, 80), f"Niveau {level}  |  XP {total_xp}", font=small_font, fill=(170, 180, 200))
+        draw.text((180, 100), f"Semaine {weekly_xp} XP", font=small_font, fill=(140, 160, 190))
+
+        # Progress bar
+        bar_x, bar_y, bar_w, bar_h = 180, 125, 480, 12
+        draw.rounded_rectangle((bar_x, bar_y, bar_x + bar_w, bar_y + bar_h), radius=6, fill=(38, 46, 68))
+        fill_w = int(bar_w * (progress / 100))
+        draw.rounded_rectangle((bar_x, bar_y, bar_x + max(fill_w, 6), bar_y + bar_h), radius=6, fill=(86, 210, 180))
+        draw.text((bar_x + bar_w + 10, bar_y - 2), f"{progress:.1f}%", font=small_font, fill=(170, 180, 200))
+
+        # Analytics blocks
+        emoji_usage = analytics_data.get("emoji_usage", {})
+        word_counts = analytics_data.get("word_counts", {})
+        segments = analytics_data.get("segments", {})
+
+        top_emojis = sorted(emoji_usage.items(), key=lambda item: (-item[1], item[0]))[:3]
+        top_words = sorted(word_counts.items(), key=lambda item: (-item[1], item[0]))[:5]
+
+        segment_labels = {
+            "night": "Nuit",
+            "morning": "Matin",
+            "afternoon": "Apres-midi",
+            "evening": "Soir",
+        }
+        dominant_label = "-"
+        if segments:
+            dominant_segment = max(segments.items(), key=lambda item: item[1])[0]
+            dominant_label = segment_labels.get(dominant_segment, "-")
+
+        left_x = 52
+        right_x = 370
+        top_y = 200
+
+        draw.text((left_x, top_y), "Top emojis", font=small_font, fill=(200, 210, 230))
+        emoji_text = " ".join([emoji for emoji, _ in top_emojis]) if top_emojis else "-"
+        draw.text((left_x, top_y + 20), emoji_text, font=title_font, fill=(236, 242, 255))
+
+        draw.text((left_x, top_y + 60), "Top mots", font=small_font, fill=(200, 210, 230))
+        words_text = ", ".join([word for word, _ in top_words]) if top_words else "-"
+        draw.text((left_x, top_y + 80), words_text, font=small_font, fill=(236, 242, 255))
+
+        draw.text((right_x, top_y), "Tranche dominante", font=small_font, fill=(200, 210, 230))
+        draw.text((right_x, top_y + 20), dominant_label, font=title_font, fill=(236, 242, 255))
+
+        streak_days = user_data.get("streak_days", 0)
+        draw.text((right_x, top_y + 60), "Streak", font=small_font, fill=(200, 210, 230))
+        draw.text((right_x, top_y + 80), f"{streak_days} jours", font=title_font, fill=(236, 242, 255))
+
+        output = BytesIO()
+        image.save(output, format="PNG")
+        output.seek(0)
+        return output
     
     def _update_streak(self, user_data: EngagementUser):
         """Met à jour le streak journalier de l'utilisateur."""
@@ -428,9 +545,9 @@ class EngagementCog(commands.Cog):
         await channel.send(embed=embed)
     
     # Commandes préfixées uniquement (slash désactivé pour l'instant)
-    @commands.command(name="rang", aliases=["rank", "stats", "profil", "niveau"])
-    async def rang_prefix(self, ctx):
-        """Voir ton niveau et tes statistiques (préfixé)"""
+    @commands.command(name="profil", aliases=["rang", "rank", "stats", "niveau"])
+    async def profil_prefix(self, ctx):
+        """Carte profil (préfixé)"""
         if not ctx.guild:
             await ctx.send("Cette commande ne fonctionne pas en DM.")
             return
@@ -444,44 +561,9 @@ class EngagementCog(commands.Cog):
             return
         
         user_data = guild_data["users"][user_id]
-        total_xp = user_data.get("xp", 0)
-        weekly_xp = user_data.get("weekly_xp", 0)
-        messages = user_data.get("messages", 0)
-        
-        level = calculate_level(total_xp)
-        progress, _ = get_level_progress(total_xp)
-        
-        # Calculer position
-        all_users = sorted(
-            guild_data["users"].items(),
-            key=lambda x: x[1].get("xp", 0),
-            reverse=True
-        )
-        position = next((i for i, (uid, _) in enumerate(all_users) if uid == user_id), 0) + 1
-        
-        # Barre de progression
-        filled = int(progress / 10)
-        bar = "█" * filled + "░" * (10 - filled)
-        
-        embed = Embed(
-            title=f"📊 Profil de {ctx.author.display_name}",
-            color=0x3498db
-        )
-        embed.add_field(name="Niveau", value=str(level), inline=True)
-        embed.add_field(name="Position", value=f"#{position}", inline=True)
-        embed.add_field(name="Messages", value=str(messages), inline=True)
-        embed.add_field(name="XP Total", value=str(total_xp), inline=True)
-        embed.add_field(name="XP Semaine", value=str(weekly_xp), inline=True)
-        
-        # Ajouter le streak (pour collecte de data)
-        streak_days = user_data.get("streak_days", 0)
-        if streak_days > 0:
-            streak_emoji = "🔥" if streak_days >= 7 else "⚡"
-            embed.add_field(name=f"{streak_emoji} Streak", value=f"{streak_days} jours", inline=True)
-        
-        embed.add_field(name="Progression", value=f"{bar} {progress:.1f}%", inline=False)
-        
-        await ctx.send(embed=embed)
+        analytics_data = self._get_analytics_snapshot(guild_id, int(user_id))
+        card = await self._build_profile_card(ctx.author, user_data, analytics_data)
+        await ctx.send(file=File(fp=card, filename="profil.png"))
     
     @commands.command(name="classement", aliases=["ranking", "top", "leaderboard", "top10"])
     async def classement_prefix(self, ctx):
