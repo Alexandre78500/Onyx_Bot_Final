@@ -48,7 +48,23 @@ class EngagementCog(commands.Cog):
         self.data = {"users": {}, "weekly_reset": None}
         self.cooldowns = {}  # {user_id: last_message_time}
         self._load_data()
+        # Initialiser le prochain reset si nécessaire
+        if self.data["weekly_reset"] is None:
+            self._set_next_weekly_reset()
+            self._save_data()
         self.weekly_ranking.start()
+    
+    def _set_next_weekly_reset(self):
+        """Définit le prochain reset hebdomadaire (dimanche 20h)."""
+        now = self._get_paris_now()
+        # Trouver le prochain dimanche
+        days_until_sunday = (6 - now.weekday()) % 7
+        if days_until_sunday == 0 and now.hour >= 20:
+            # Si c'est déjà dimanche après 20h, prendre dimanche prochain
+            days_until_sunday = 7
+        next_reset = now + timedelta(days=days_until_sunday)
+        next_reset = next_reset.replace(hour=20, minute=0, second=0, microsecond=0)
+        self.data["weekly_reset"] = next_reset
     
     def cog_unload(self):
         self.weekly_ranking.cancel()
@@ -119,15 +135,7 @@ class EngagementCog(commands.Cog):
         for user_data in self.data["users"].values():
             user_data["weekly_xp"] = 0
         
-        # Prochain reset: dimanche prochain à 20h
-        now = self._get_paris_now()
-        days_until_sunday = (6 - now.weekday()) % 7
-        if days_until_sunday == 0:
-            days_until_sunday = 7
-        next_reset = now + timedelta(days=days_until_sunday)
-        next_reset = next_reset.replace(hour=20, minute=0, second=0, microsecond=0)
-        
-        self.data["weekly_reset"] = next_reset
+        self._set_next_weekly_reset()
         self._save_data()
     
     @commands.Cog.listener()
@@ -297,6 +305,90 @@ class EngagementCog(commands.Cog):
             )
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    # Commandes préfixées
+    @commands.command(name="rang", aliases=["rank", "stats", "profil", "niveau"])
+    async def rang_prefix(self, ctx):
+        """Voir ton niveau et tes statistiques (préfixé)"""
+        user_id = str(ctx.author.id)
+        
+        if user_id not in self.data["users"]:
+            await ctx.send("Tu n'as pas encore d'activité enregistrée. Commence à discuter pour gagner de l'XP ! 📈")
+            return
+        
+        user_data = self.data["users"][user_id]
+        total_xp = user_data.get("xp", 0)
+        weekly_xp = user_data.get("weekly_xp", 0)
+        messages = user_data.get("messages", 0)
+        
+        level = calculate_level(total_xp)
+        progress, _ = get_level_progress(total_xp)
+        
+        # Calculer position
+        all_users = sorted(
+            self.data["users"].items(),
+            key=lambda x: x[1].get("xp", 0),
+            reverse=True
+        )
+        position = next((i for i, (uid, _) in enumerate(all_users) if uid == user_id), 0) + 1
+        
+        # Barre de progression
+        filled = int(progress / 10)
+        bar = "█" * filled + "░" * (10 - filled)
+        
+        embed = Embed(
+            title=f"📊 Profil de {ctx.author.display_name}",
+            color=0x3498db
+        )
+        embed.add_field(name="Niveau", value=str(level), inline=True)
+        embed.add_field(name="Position", value=f"#{position}", inline=True)
+        embed.add_field(name="Messages", value=str(messages), inline=True)
+        embed.add_field(name="XP Total", value=str(total_xp), inline=True)
+        embed.add_field(name="XP Semaine", value=str(weekly_xp), inline=True)
+        embed.add_field(name="Progression", value=f"{bar} {progress:.1f}%", inline=False)
+        
+        await ctx.send(embed=embed)
+    
+    @commands.command(name="classement", aliases=["ranking", "top", "leaderboard", "top10"])
+    async def classement_prefix(self, ctx):
+        """Voir le classement global (préfixé)"""
+        # Trier par XP total
+        sorted_users = sorted(
+            self.data["users"].items(),
+            key=lambda x: x[1].get("xp", 0),
+            reverse=True
+        )[:10]
+        
+        if not sorted_users:
+            await ctx.send("Aucun membre n'a encore d'activité enregistrée !")
+            return
+        
+        embed = Embed(
+            title="🏆 Classement Global",
+            description="Top 10 des membres les plus actifs !",
+            color=0x9b59b6,
+            timestamp=self._get_paris_now()
+        )
+        
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+        
+        for i, (user_id, data) in enumerate(sorted_users):
+            user = self.bot.get_user(int(user_id))
+            if not user:
+                continue
+            
+            total_xp = data.get("xp", 0)
+            level = calculate_level(total_xp)
+            messages = data.get("messages", 0)
+            
+            medal = medals[i] if i < 10 else f"{i+1}."
+            embed.add_field(
+                name=f"{medal} {user.display_name}",
+                value=f"Niveau {level} • {total_xp} XP • {messages} messages",
+                inline=False
+            )
+        
+        await ctx.send(embed=embed)
 
 
 async def setup(bot: commands.Bot):
