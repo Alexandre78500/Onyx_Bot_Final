@@ -108,7 +108,7 @@ class EngagementCog(commands.Cog):
         self.cooldowns[user_id] = now
         return True
     
-    def _add_xp(self, user_id: int, xp_amount: int, is_weekly: bool = True):
+    def _add_xp(self, user_id: int, xp_amount: int, user_name: str | None = None, is_weekly: bool = True):
         """Ajoute de l'XP à un utilisateur."""
         user_id_str = str(user_id)
         
@@ -117,7 +117,8 @@ class EngagementCog(commands.Cog):
                 "xp": 0,
                 "weekly_xp": 0,
                 "messages": 0,
-                "last_active": None
+                "last_active": None,
+                "display_name": user_name
             }
         
         user_data = self.data["users"][user_id_str]
@@ -126,6 +127,8 @@ class EngagementCog(commands.Cog):
             user_data["weekly_xp"] += xp_amount
         user_data["messages"] += 1
         user_data["last_active"] = self._get_paris_now().isoformat()
+        if user_name:
+            user_data["display_name"] = user_name
         
         self._save_data()
         return user_data
@@ -152,7 +155,7 @@ class EngagementCog(commands.Cog):
         
         # Ajouter XP (5-15 aléatoire)
         xp_gain = random.randint(XP_PER_MESSAGE_MIN, XP_PER_MESSAGE_MAX)
-        self._add_xp(user_id, xp_gain)
+        self._add_xp(user_id, xp_gain, message.author.display_name)
     
     @tasks.loop(minutes=1)
     async def weekly_ranking(self):
@@ -197,8 +200,8 @@ class EngagementCog(commands.Cog):
         
         for i, (user_id, data) in enumerate(sorted_users):
             user = self.bot.get_user(int(user_id))
-            if not user:
-                continue
+            # Utiliser le nom stocké si l'utilisateur n'est pas dans le cache
+            display_name = user.display_name if user else data.get("display_name", f"Utilisateur {user_id}")
             
             weekly_xp = data.get("weekly_xp", 0)
             total_xp = data.get("xp", 0)
@@ -206,7 +209,7 @@ class EngagementCog(commands.Cog):
             
             medal = medals[i] if i < 10 else f"{i+1}."
             embed.add_field(
-                name=f"{medal} {user.display_name}",
+                name=f"{medal} {display_name}",
                 value=f"Niveau {level} • {weekly_xp} XP cette semaine",
                 inline=False
             )
@@ -214,8 +217,9 @@ class EngagementCog(commands.Cog):
         # Mention du gagnant
         winner_id = sorted_users[0][0]
         winner = self.bot.get_user(int(winner_id))
-        if winner:
-            embed.set_footer(text=f"🎉 Bravo à {winner.display_name} pour cette semaine !")
+        winner_data = sorted_users[0][1]
+        winner_name = winner.display_name if winner else winner_data.get("display_name", "Inconnu")
+        embed.set_footer(text=f"🎉 Bravo à {winner_name} pour cette semaine !")
         
         await channel.send(embed=embed)
     
@@ -289,9 +293,17 @@ class EngagementCog(commands.Cog):
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
         
         for i, (user_id, data) in enumerate(sorted_users):
+            # Essayer d'obtenir le membre depuis la guild pour avoir le nom à jour
+            member = interaction.guild.get_member(int(user_id)) if interaction.guild else None
             user = self.bot.get_user(int(user_id))
-            if not user:
-                continue
+            # Priorité: member > user > data stocké
+            display_name = None
+            if member:
+                display_name = member.display_name
+            elif user:
+                display_name = user.display_name
+            else:
+                display_name = data.get("display_name", f"Utilisateur {user_id}")
             
             total_xp = data.get("xp", 0)
             level = calculate_level(total_xp)
@@ -299,7 +311,7 @@ class EngagementCog(commands.Cog):
             
             medal = medals[i] if i < 10 else f"{i+1}."
             embed.add_field(
-                name=f"{medal} {user.display_name}",
+                name=f"{medal} {display_name}",
                 value=f"Niveau {level} • {total_xp} XP • {messages} messages",
                 inline=False
             )
@@ -373,9 +385,17 @@ class EngagementCog(commands.Cog):
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
         
         for i, (user_id, data) in enumerate(sorted_users):
+            # Essayer d'obtenir le membre depuis la guild pour avoir le nom à jour
+            member = ctx.guild.get_member(int(user_id)) if ctx.guild else None
             user = self.bot.get_user(int(user_id))
-            if not user:
-                continue
+            # Priorité: member > user > data stocké
+            display_name = None
+            if member:
+                display_name = member.display_name
+            elif user:
+                display_name = user.display_name
+            else:
+                display_name = data.get("display_name", f"Utilisateur {user_id}")
             
             total_xp = data.get("xp", 0)
             level = calculate_level(total_xp)
@@ -383,7 +403,7 @@ class EngagementCog(commands.Cog):
             
             medal = medals[i] if i < 10 else f"{i+1}."
             embed.add_field(
-                name=f"{medal} {user.display_name}",
+                name=f"{medal} {display_name}",
                 value=f"Niveau {level} • {total_xp} XP • {messages} messages",
                 inline=False
             )
