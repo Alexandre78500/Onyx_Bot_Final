@@ -14,6 +14,7 @@ from discord.ext import commands, tasks
 from bot.constants import (
     ENGAGEMENT_COOLDOWN_SECONDS,
     ENGAGEMENT_SAVE_INTERVAL_SECONDS,
+    COMMAND_CHANNEL_IDS_GENERAL_ONLY,
     XP_GM_BONUS as CONST_XP_GM_BONUS,
     XP_PER_MESSAGE_MAX as CONST_XP_PER_MESSAGE_MAX,
     XP_PER_MESSAGE_MIN as CONST_XP_PER_MESSAGE_MIN,
@@ -51,6 +52,28 @@ UNICODE_EMOJI_RE = re.compile(
     "]",
     re.UNICODE,
 )
+
+
+def _format_channel_mentions(channel_ids: set[int]) -> str:
+    return ", ".join(f"<#{channel_id}>" for channel_id in sorted(channel_ids))
+
+
+async def _ensure_allowed_channel(ctx, allowed_channel_ids: set[int]) -> bool:
+    if not ctx.guild:
+        await ctx.send("Cette commande ne fonctionne pas en DM.")
+        return False
+
+    if ctx.channel.id not in allowed_channel_ids:
+        channels_text = _format_channel_mentions(allowed_channel_ids)
+        if len(allowed_channel_ids) == 1:
+            await ctx.send(f"Merci d'utiliser cette commande dans {channels_text}.")
+        else:
+            await ctx.send(
+                f"Merci d'utiliser cette commande dans l'un de ces salons : {channels_text}."
+            )
+        return False
+
+    return True
 
 
 class EngagementUser(TypedDict):
@@ -656,8 +679,7 @@ class EngagementCog(commands.Cog):
     @commands.command(name="profil", aliases=["rang", "rank", "stats", "niveau"])
     async def profil_prefix(self, ctx):
         """Carte profil (préfixé)"""
-        if not ctx.guild:
-            await ctx.send("Cette commande ne fonctionne pas en DM.")
+        if not await _ensure_allowed_channel(ctx, COMMAND_CHANNEL_IDS_GENERAL_ONLY):
             return
         
         guild_id = ctx.guild.id
@@ -685,8 +707,7 @@ class EngagementCog(commands.Cog):
     @commands.command(name="classement", aliases=["ranking", "top", "leaderboard", "top10"])
     async def classement_prefix(self, ctx):
         """Voir le classement global (préfixé)"""
-        if not ctx.guild:
-            await ctx.send("Cette commande ne fonctionne pas en DM.")
+        if not await _ensure_allowed_channel(ctx, COMMAND_CHANNEL_IDS_GENERAL_ONLY):
             return
         
         guild_id = ctx.guild.id

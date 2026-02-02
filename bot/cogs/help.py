@@ -1,6 +1,25 @@
 import discord
 from discord.ext import commands
 
+from bot.constants import COMMAND_CHANNEL_IDS_GENERAL_ONLY
+
+
+def _format_channel_mentions(channel_ids: set[int]) -> str:
+    return ", ".join(f"<#{channel_id}>" for channel_id in sorted(channel_ids))
+
+
+async def _ensure_allowed_channel(ctx, allowed_channel_ids: set[int]) -> bool:
+    if not ctx.guild:
+        await ctx.send("Cette commande ne fonctionne pas en DM.")
+        return False
+
+    if ctx.channel.id not in allowed_channel_ids:
+        channels_text = _format_channel_mentions(allowed_channel_ids)
+        await ctx.send(f"Merci d'utiliser cette commande dans {channels_text}.")
+        return False
+
+    return True
+
 
 class HelpCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -9,6 +28,8 @@ class HelpCog(commands.Cog):
     @commands.command(name="help", aliases=["aide", "commands", "commandes", "cmd"])
     async def help_command(self, ctx):
         """Affiche toutes les commandes disponibles"""
+        if not await _ensure_allowed_channel(ctx, COMMAND_CHANNEL_IDS_GENERAL_ONLY):
+            return
         
         embed = discord.Embed(
             title="🌙 Commandes Disponibles",

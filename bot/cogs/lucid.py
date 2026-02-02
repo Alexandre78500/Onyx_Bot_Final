@@ -3,6 +3,7 @@ import random
 from discord import Interaction, app_commands
 from discord.ext import commands
 
+from bot.constants import COMMAND_CHANNEL_IDS_LUCID
 
 CONSEILS_REVE_LUCIDE = [
     "Garde un journal de rêves à côté de ton lit.",
@@ -13,6 +14,25 @@ CONSEILS_REVE_LUCIDE = [
 ]
 
 
+def _format_channel_mentions(channel_ids: set[int]) -> str:
+    return ", ".join(f"<#{channel_id}>" for channel_id in sorted(channel_ids))
+
+
+async def _ensure_allowed_channel(ctx, allowed_channel_ids: set[int]) -> bool:
+    if not ctx.guild:
+        await ctx.send("Cette commande ne fonctionne pas en DM.")
+        return False
+
+    if ctx.channel.id not in allowed_channel_ids:
+        channels_text = _format_channel_mentions(allowed_channel_ids)
+        await ctx.send(
+            f"Merci d'utiliser cette commande dans l'un de ces salons : {channels_text}."
+        )
+        return False
+
+    return True
+
+
 class LucidCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -20,12 +40,16 @@ class LucidCog(commands.Cog):
     @commands.command(name="conseil", aliases=["tip", "astuce"])
     async def conseil_prefix(self, ctx):
         """Obtenir un conseil pour faire des rêves lucides"""
+        if not await _ensure_allowed_channel(ctx, COMMAND_CHANNEL_IDS_LUCID):
+            return
         conseil = random.choice(CONSEILS_REVE_LUCIDE)
         await ctx.send(f"💡 **Conseil rêve lucide :** {conseil}")
 
     @commands.command(name="ressource", aliases=["lien", "resources"])
     async def ressource_prefix(self, ctx):
         """Partager une ressource utile sur les rêves lucides"""
+        if not await _ensure_allowed_channel(ctx, COMMAND_CHANNEL_IDS_LUCID):
+            return
         await ctx.send("📚 **Ressources rêves lucides :** https://fr.wikipedia.org/wiki/Rêve_lucide")
 
     # Slash commands désactivés pour l'instant
