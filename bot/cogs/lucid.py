@@ -3,6 +3,7 @@ import random
 from discord import Interaction, app_commands
 from discord.ext import commands
 
+from bot.command_limits import notify_user_in_channel
 from bot.constants import COMMAND_CHANNEL_IDS_LUCID
 
 CONSEILS_REVE_LUCIDE = [
@@ -13,21 +14,13 @@ CONSEILS_REVE_LUCIDE = [
     "Cherche des signes de rêves récurrents et questionne-les pendant la journée.",
 ]
 
-
-def _format_channel_mentions(channel_ids: set[int]) -> str:
-    return ", ".join(f"<#{channel_id}>" for channel_id in sorted(channel_ids))
-
-
 async def _ensure_allowed_channel(ctx, allowed_channel_ids: set[int]) -> bool:
     if not ctx.guild:
         await ctx.send("Cette commande ne fonctionne pas en DM.")
         return False
 
     if ctx.channel.id not in allowed_channel_ids:
-        channels_text = _format_channel_mentions(allowed_channel_ids)
-        await ctx.send(
-            f"Merci d'utiliser cette commande dans l'un de ces salons : {channels_text}."
-        )
+        await notify_user_in_channel(ctx)
         return False
 
     return True
