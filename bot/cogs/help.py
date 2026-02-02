@@ -10,6 +10,10 @@ async def _ensure_allowed_channel(ctx, allowed_channel_ids: set[int]) -> bool:
         return False
 
     if ctx.channel.id not in allowed_channel_ids:
+        try:
+            await ctx.message.delete()
+        except Exception:
+            pass
         await notify_user_in_channel(ctx)
         return False
 
