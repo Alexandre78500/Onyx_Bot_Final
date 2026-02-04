@@ -296,7 +296,7 @@ class EngagementCog(commands.Cog):
         user_id_str = str(user_id)
 
         emoji_usage = stats.get("emoji_text_usage", {}).get("users", {}).get(user_id_str, {})
-        word_counts = stats.get("word_counts", {})
+        word_counts = stats.get("word_counts_by_user", {}).get(user_id_str, {})
         segments = stats.get("messages_by_segment", {})
 
         return {
@@ -502,7 +502,7 @@ class EngagementCog(commands.Cog):
             msg = random.choice(messages)
         
         try:
-            await channel.send(msg)
+            await channel.send(msg, delete_after=3)
         except:
             pass  # Silencieux si erreur
     

@@ -182,6 +182,7 @@ class AnalyticsCog(commands.Cog):
                 "unique_users": [],  # Stocké comme liste pour JSON, mais on utilise des sets en mémoire
                 "unique_channels": [],
                 "word_counts": {},
+                "word_counts_by_user": {},
                 "emoji_text_usage": {
                     "users": {}
                 },
@@ -274,11 +275,15 @@ class AnalyticsCog(commands.Cog):
             stats["unique_channels"].append(channel_id)
         
         # 4. Word count
-        if message.content:
+        if message.content and not message.content.startswith(("o!", "O!")):
             words = self._extract_words(message.content)
             kept_words = [word for word in words if word not in COMMON_WORDS and len(word) >= 3]
-            for word in kept_words:
-                stats["word_counts"][word] = stats["word_counts"].get(word, 0) + 1
+            if kept_words:
+                for word in kept_words:
+                    stats["word_counts"][word] = stats["word_counts"].get(word, 0) + 1
+                user_words = stats.setdefault("word_counts_by_user", {}).setdefault(author_id, {})
+                for word in kept_words:
+                    user_words[word] = user_words.get(word, 0) + 1
             if ANALYTICS_DEBUG_WORDS and kept_words:
                 logger.debug(
                     "[Analytics] Words kept guild=%s author=%s words=%s",
@@ -440,13 +445,20 @@ class AnalyticsCog(commands.Cog):
                 continue
             stats = guild_data.get("global_stats", {})
             word_counts = stats.get("word_counts", {})
-            if not word_counts:
-                continue
+            if word_counts:
+                # Trier par occurrences (desc), puis par mot (asc) pour stabilite
+                top_items = sorted(word_counts.items(), key=lambda item: (-item[1], item[0]))
+                top_items = top_items[:ANALYTICS_WORD_COUNT_TOP_N]
+                stats["word_counts"] = {word: count for word, count in top_items}
 
-            # Trier par occurrences (desc), puis par mot (asc) pour stabilite
-            top_items = sorted(word_counts.items(), key=lambda item: (-item[1], item[0]))
-            top_items = top_items[:ANALYTICS_WORD_COUNT_TOP_N]
-            stats["word_counts"] = {word: count for word, count in top_items}
+            word_counts_by_user = stats.get("word_counts_by_user", {})
+            if word_counts_by_user:
+                for user_id, counts in list(word_counts_by_user.items()):
+                    if not counts:
+                        continue
+                    top_items = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+                    top_items = top_items[:ANALYTICS_WORD_COUNT_TOP_N]
+                    word_counts_by_user[user_id] = {word: count for word, count in top_items}
 
         self.data["_meta"]["last_word_prune"] = today
     

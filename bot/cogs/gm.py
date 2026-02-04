@@ -204,10 +204,6 @@ class GMCog(commands.Cog):
         # Marquer GM comme dit pour cet utilisateur
         self._mark_gm_said(guild_id, user_id)
         
-        # Attendre entre 5 et 10 secondes
-        delay = random.randint(5, 10)
-        await asyncio.sleep(delay)
-        
         # Récupérer le pseudo (nickname serveur sinon username)
         display_name = message.author.display_name
         
@@ -216,7 +212,7 @@ class GMCog(commands.Cog):
         response = response_template.format(pseudo=display_name)
         
         # Envoyer la réponse
-        await message.channel.send(response)
+        await message.channel.send(response, delete_after=60)
 
 
 async def setup(bot: commands.Bot):
