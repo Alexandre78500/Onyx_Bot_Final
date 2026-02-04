@@ -1,503 +1,267 @@
-# 🤖 Onyx Bot - Discord Bot Rêves Lucides & Analytics
+# Onyx Bot
 
-Bot Discord complet avec système de rêves lucides, engagement utilisateur et analytics avancées.
+**Bot Discord communautaire** — Engagement, analytics et reves lucides.
 
-## 📋 Table des matières
-- [Fonctionnalités](#-fonctionnalités)
-- [Architecture](#-architecture)
-- [Fichiers de données](#-fichiers-de-données)
-- [Installation](#-installation)
-- [Commandes](#-commandes)
-- [Configuration](#-configuration)
-- [Développement](#-développement)
-- [Schéma de données](#-schéma-de-données)
+Onyx est un bot Discord modulaire construit avec discord.py. Il suit l'activite d'un serveur en temps reel, attribue de l'XP aux membres, genere des classements hebdomadaires et collecte des analytics detaillees sur les conversations. Le tout avec un systeme de cogs extensible et une persistance JSON automatique.
 
 ---
 
-## ✨ Fonctionnalités
+## Apercu des fonctionnalites
 
-### 🌙 Système Rêves Lucides
-- `o!conseil` - Conseils aléatoires pour faire des rêves lucides
-- `o!ressource` - Liens vers des ressources éducatives
-
-### 📊 Système d'Engagement (XP & Niveaux)
-- **Gain d'XP automatique** : 8 XP par message (cooldown 15s)
-- **Niveaux progressifs** : Algorithmes de niveau avec courbe d'XP croissante
-- **Félicitations automatiques** : Messages de félicitations quand on monte de niveau
-- **Profil** : `o!profil` affiche un embed riche (niveau, XP, position, emojis, mots, tranche)
-- **Classement** : `o!classement` (top 10 serveur + ta position + écart d'XP + progression)
-- **Streak journalier** : Nombre de jours consécutifs d'activité
-- **Classement hebdomadaire** : Post automatique le dimanche à 20h
-
-### 🤖 Features Automatiques
-- **GM** : Réponds "gm" pour recevoir un message personnalisé (1x/jour par serveur)
-- **Réactions auto** : Le bot réagit avec `:hap:` et `:noel:` quand ces emojis sont utilisés
-- **Suggestions de commandes** : Si tu fais une faute (ex: `o!classsement`), le bot suggère la bonne commande (liste auto)
-
-### 📈 Analytics Complètes
-Collecte automatique à chaque message :
-- **Stats temporelles** : Messages par jour de la semaine (7 valeurs) et par heure (24 valeurs)
-- **Tranches horaires** : Activite par segments (nuit, matin, apres-midi, soir)
-- **Word count** : Top mots utilisés sur le serveur (exclut les mots communs)
-- **Top 50 mots** : Nettoyage automatique 1x/jour pour garder les 50 mots les plus frequents
-- **Emojis texte favoris** : Top emojis par utilisateur (uniquement dans le texte)
-- **Graphe de conversations** : Qui répond à qui (réponses explicites si dispo, sinon messages < 5 min)
-- **Graphe de mentions** : Qui mentionne qui fréquemment
-- **Stats réactions** : Nombre total de réactions et par emoji
-- **Archive complète** : Tous les messages sauvegardés avec timestamp, auteur, contenu, mentions, etc.
+| Module | Ce qu'il fait |
+|---|---|
+| **Engagement** | XP par message, niveaux progressifs, streaks, profil, classement hebdo |
+| **Analytics** | Collecte 24/7 : mots, emojis, conversations, mentions, reactions, archive complete |
+| **Good Morning** | Reponse personnalisee au "gm" quotidien, bonus XP |
+| **Reves Lucides** | Conseils aleatoires et ressources educatives |
+| **Reactions** | Le bot reagit automatiquement aux emojis `:hap:` et `:noel:` |
+| **Error Handler** | Suggestion de la bonne commande en cas de faute de frappe |
 
 ---
 
-## 🏗️ Architecture
+## Demarrage rapide
 
-### Structure du projet
-```
-bot/
-├── __init__.py
-├── main.py                 # Point d'entrée, chargement des cogs
-├── config.py              # Configuration environnement
-├── constants.py            # Constantes centralisées (timers, XP, seuils)
-└── cogs/
-    ├── __init__.py
-    ├── analytics.py       # 📈 Cog analytics (collecte données)
-    ├── engagement.py      # 📊 Cog XP/niveaux/classements
-    ├── error_handler.py   # 💡 Suggestions commandes
-    ├── gm.py             # 🌅 Système GM (good morning)
-    ├── help.py           # ❓ Commande help
-    ├── lucid.py          # 🌙 Commandes rêves lucides
-    └── reactions.py      # 😄 Réactions auto aux emojis
+### Prerequis
 
-data/                     # Dossier données (créé auto)
-├── analytics_v1.json     # Stats globales (JSON)
-├── messages_archive_v1.jsonl  # Archive messages (JSONL)
-└── analytics_config.json # Configuration analytics
-
-# Autres fichiers
-engagement_data.json      # Données XP par serveur
-gm_data.json             # Données GM par serveur
-```
-
-### Pattern Cogs (discord.py)
-- Chaque fonctionnalité = un cog séparé
-- Cogs chargés automatiquement dans `main.py:setup_hook()`
-- Gestion des événements via `@commands.Cog.listener()`
-- Commandes préfixées uniquement (`o!`) pour l'instant
-
-### Constantes centralisées
-- Les timers (save/reset), XP, cooldowns et tailles de cache sont regroupés dans `bot/constants.py`
-- Modifier ces valeurs ici évite de chercher dans plusieurs fichiers
-
-### Gestion des données
-- **Format** : JSON pour les stats, JSONL pour l'archive
-- **Persistance** :
-  - Analytics : sauvegarde toutes les 5 minutes + au shutdown
-  - Engagement / GM : sauvegarde toutes les 60s si données modifiées + au shutdown
-- **En mémoire** : Données chargées en RAM pour accès instantané
-- **I/O async** : Écritures via executor + buffer (évite de bloquer l'event loop)
-- **Tolérance** : Perte max ~60s en cas de crash brutal (données en buffer)
-
----
-
-## 📁 Fichiers de données
-
-### 1. `data/analytics_v1.json`
-**Contenu** : Statistiques globales du serveur
-
-```json
-{
-  "_meta": {
-    "schema_version": 1,
-    "created_at": "2026-02-01T20:00:00",
-    "last_migration": "2026-02-01T20:00:00",
-    "guilds": ["123456789"],
-    "last_word_prune": "2026-02-01"
-  },
-  "123456789": {
-    "global_stats": {
-      "messages_total": 1250,
-      "messages_by_day": [45, 32, 67, 89, 120, 200, 150],
-      "messages_by_hour": [0,0,0,0,2,5,12,45,89,120...],
-      "messages_by_segment": {"night": 12, "morning": 120, "afternoon": 340, "evening": 778},
-      "unique_users": ["user_id_1", "user_id_2"],
-      "unique_channels": ["channel_id_1"],
-      "word_counts": {"rêve": 150, "technique": 89, "fille": 45},
-      "emoji_text_usage": {
-        "users": {"user_id_1": {"😀": 12, ":hap:": 4}}
-      },
-      "conversations": {"user1_user2": 15, "user1_user3": 8},
-      "mentions_graph": {
-        "given": {"user1": {"user2": 5}},
-        "received": {"user2": {"user1": 5}}
-      },
-      "reactions_stats": {
-        "total_added": 450,
-        "by_emoji": {"hap": 120, "noel": 89}
-      }
-    }
-  },
-  "_schema_history": []
-}
-```
-
-**Champs importants :**
-- `messages_by_day[0-6]` : Lundi (0) à Dimanche (6)
-- `messages_by_hour[0-23]` : 00h à 23h
-- `messages_by_segment` : Activite par tranches (night, morning, afternoon, evening)
-- `conversations["userA_userB"]` : Nombre de réponses entre ces deux users
-- `word_counts` : Tous les mots (≥3 lettres, hors mots communs) avec leur fréquence
-- `emoji_text_usage.users` : Emojis utilises dans le texte par utilisateur
-- `_meta.guilds` : Optionnel (liste ou dict historique, non critique pour la migration)
-- `_meta.last_word_prune` : Derniere date de nettoyage du top 50
-
-### 2. `data/messages_archive_v1.jsonl`
-**Format** : JSON Lines (1 ligne = 1 message JSON)
-
-```json
-{"ts":"2026-02-01T20:15:30","guild":"123","channel":"456","author":"789","author_name":"Pseudo","content":"Bonjour !","mentions":["321"],"has_attachments":false,"is_reply_to":null,"msg_id":"abc123"}
-{"ts":"2026-02-01T20:16:45","guild":"123","channel":"456","author":"321","author_name":"Autre","content":"Salut !","mentions":["789"],"has_attachments":false,"is_reply_to":"abc123"}
-```
-
-**Champs :**
-- `ts` : ISO 8601 timestamp
-- `guild` : ID du serveur
-- `channel` : ID du canal
-- `author` : ID de l'auteur
-- `author_name` : Nom affiché au moment du message
-- `content` : Contenu textuel
-- `mentions` : Liste des IDs mentionnés
-- `has_attachments` : Booléen (images, fichiers)
-- `is_reply_to` : ID du message parent (si réponse)
-- `msg_id` : ID unique du message
-
-### 3. `engagement_data.json`
-**Contenu** : Données XP et niveaux par serveur
-
-```json
-{
-  "guilds": {
-    "123456789": {
-      "users": {
-        "user_id": {
-          "xp": 1250,
-          "weekly_xp": 150,
-          "messages": 89,
-          "last_active": "2026-02-01T20:15:30",
-          "display_name": "Pseudo",
-          "streak_days": 5,
-          "last_streak_date": "2026-02-01T20:15:30"
-        }
-      },
-      "weekly_reset": "2026-02-07T20:00:00",
-      "channel_id": 456789
-    }
-  }
-}
-```
-
-### 4. `gm_data.json`
-**Contenu** : Suivi des GM quotidiens
-
-```json
-{
-  "guild_id": {
-    "user_id": ["2026-02-01", true],
-    "user_id2": ["2026-02-01", false]
-  }
-}
-```
-
----
-
-## 🚀 Installation
-
-### Prérequis
 - Python 3.10+
-- pip
-- Virtualenv (recommandé)
+- Un bot Discord avec l'intent `message_content` active
 
-### Setup
+### Installation
 
 ```bash
-# 1. Cloner le repo
 git clone https://github.com/Alexandre78500/Onyx_Bot_Final.git
 cd Onyx_Bot_Final
 
-# 2. Créer l'environnement virtuel
 python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# ou
-.venv\Scripts\activate  # Windows
+.venv\Scripts\activate        # Windows
+# source .venv/bin/activate   # Linux / Mac
 
-# 3. Installer les dépendances
 pip install -r requirements.txt
+```
 
-# 4. Configuration
-cp .env.example .env
-# Éditer .env avec votre token
+### Configuration
 
-# 5. Créer le dossier data
+Copier `.env.example` vers `.env` et renseigner les valeurs :
+
+```env
+DISCORD_TOKEN=ton_token_ici
+GUILD_ID=123456789            # Optionnel — sync rapide en dev
+```
+
+### Lancement
+
+```bash
 mkdir data
-
-# 6. Lancer
 python -m bot.main
 ```
 
-### Déploiement VPS (systemd)
+---
 
-```bash
-# Copier le service
-sudo cp discord-bot.service /etc/systemd/system/
-sudo systemctl daemon-reload
+## Commandes
 
-# Activer et démarrer
-sudo systemctl enable discord-bot
-sudo systemctl start discord-bot
+### Commandes prefixees (`o!`)
 
-# Logs
-sudo journalctl -u discord-bot.service -f
-```
+| Commande | Aliases | Description | Canal |
+|---|---|---|---|
+| `o!profil` | `rang`, `rank`, `stats`, `niveau` | Carte profil : niveau, XP, position, emoji favori, mot favori, tranche horaire | General uniquement |
+| `o!classement` | `top`, `ranking`, `leaderboard`, `top10` | Top 10 du serveur + position perso + ecart XP + progression | General uniquement |
+| `o!conseil` | `tip`, `astuce` | Conseil aleatoire pour faire des reves lucides | Canaux lucid |
+| `o!ressource` | `lien`, `resources` | Lien vers des ressources educatives | Canaux lucid |
+| `o!help` | `aide` | Affiche la liste des commandes | Partout |
+
+### Fonctionnalites automatiques
+
+| Declencheur | Comportement |
+|---|---|
+| Envoyer un message | +8 XP (cooldown 15s) |
+| Ecrire `gm` | Reponse personnalisee + 50 XP bonus (1x/jour, reset a 5h30) |
+| Monter de niveau | Felicitations automatiques dans le canal |
+| `:hap:` ou `:noel:` dans un message | Le bot reagit avec l'emoji correspondant |
+| Faute de frappe sur une commande | Suggestion de la commande la plus proche |
+| Dimanche 20h | Publication automatique du classement hebdomadaire |
 
 ---
 
-## 💬 Commandes
+## Architecture
 
-### Commandes de base
-- `o!help` / `o!aide` - Afficher l'aide
-- `o!conseil` / `o!tip` - Conseil rêve lucide aléatoire
-- `o!ressource` / `o!lien` - Ressources sur les rêves lucides
+### Arborescence
 
-### Commandes Engagement
-- `o!profil` / `o!rang` / `o!stats` - Carte profil (niveau, XP, emojis, mots, tranche)
-- `o!classement` / `o!top` - Top 10 du serveur + ta position + écart d'XP + progression
+```
+bot/
+  __init__.py
+  main.py                  # Point d'entree, chargement des cogs
+  config.py                # Lecture du .env (token, guild_id)
+  constants.py             # Toutes les constantes : XP, cooldowns, timers, canaux
+  command_limits.py        # Restrictions de canaux et notifications
+  cogs/
+    __init__.py
+    analytics.py           # Collecte de donnees (602 lignes)
+    engagement.py          # Systeme XP et niveaux (841 lignes)
+    gm.py                  # Good morning quotidien (219 lignes)
+    lucid.py               # Commandes reves lucides
+    reactions.py           # Reactions automatiques aux emojis
+    error_handler.py       # Suggestions de commandes
+    help.py                # Commande help personnalisee
 
-### Aliases disponibles
-Chaque commande a plusieurs aliases pour être facilement trouvée :
-- `profil` : rang, rank, stats, niveau
-- `classement` : ranking, top, leaderboard, top10
-- `conseil` : tip, astuce
-- `ressource` : lien, resources
+data/                      # Cree automatiquement
+  analytics_v1.json        # Stats globales (JSON)
+  messages_archive_v1.jsonl  # Archive complete (JSON Lines)
+  analytics_config.json    # Config analytics
 
-### Features automatiques
-- **Dis `gm`** → Le bot répond avec un message personnalisé (1x/jour)
-- **Parle normalement** → Gagne de l'XP (8 par message, cooldown 15s)
-- **Niveau up** → Félicitations automatiques
-- **`:hap:` ou `:noel:`** dans un message → Le bot réagit avec l'emoji
-- **Faute de frappe** → Suggestion de la bonne commande (ex: `o!classsement`)
+engagement_data.json       # Donnees XP par serveur (racine)
+gm_data.json               # Suivi GM par serveur (racine)
+```
+
+### Pattern general
+
+Chaque fonctionnalite est un **cog** independant (`bot/cogs/*.py`). Les cogs sont charges automatiquement au demarrage dans `main.py:setup_hook()`. Ils utilisent :
+
+- `@commands.command()` pour les commandes prefixees
+- `@commands.Cog.listener()` pour les evenements (messages, reactions)
+- `@tasks.loop()` pour les taches periodiques (sauvegarde, reset hebdo)
+
+Le prefixe est `o!` (insensible a la casse).
+
+### Persistance des donnees
+
+| Composant | Fichier | Format | Sauvegarde | Perte max en cas de crash |
+|---|---|---|---|---|
+| Analytics | `data/analytics_v1.json` | JSON | Toutes les 5 min | ~5 min |
+| Archive messages | `data/messages_archive_v1.jsonl` | JSONL | Buffer de 100 messages | ~100 messages |
+| Engagement | `engagement_data.json` | JSON | Toutes les 60s | ~60s |
+| Good Morning | `gm_data.json` | JSON | Toutes les 60s | ~60s |
+
+Toutes les ecritures passent par un executor async pour ne pas bloquer l'event loop. Les donnees sont aussi sauvegardees proprement a l'arret du bot (`cog_unload`).
 
 ---
 
-## ⚙️ Configuration
+## Systeme d'engagement
 
-### Variables d'environnement (.env)
+### Gain d'XP
 
-```bash
-DISCORD_TOKEN=your_bot_token_here
-GUILD_ID=123456789  # Optionnel - pour sync rapide dev
-```
+- **8 XP par message** avec un cooldown de 15 secondes (anti-spam)
+- **+50 XP** bonus pour le GM quotidien
+- L'XP hebdomadaire est resetee chaque dimanche a 20h (Europe/Paris)
 
-### Configuration dans les cogs
+### Calcul du niveau
 
-**`engagement.py`** :
-- `COOLDOWN_SECONDS = 15` - Anti-spam XP
-- `XP_PER_MESSAGE_MIN/MAX = 8/8` - XP par message
-- Reset hebdomadaire : Dimanche 20h (Europe/Paris)
+Formule exponentielle : il faut `100 * niveau^1.5` XP pour passer au niveau suivant.
 
-**`gm.py`** :
-- `RESET_TIME = time(5, 30)` - Reset quotidien à 5h30
-- `GM_RESPONSES` - Liste des réponses personnalisées
-
-**`analytics.py`** :
-- `SAVE_INTERVAL_MINUTES = 5` - Sauvegarde auto
-- `ARCHIVE_BUFFER_SIZE = 100` - Messages avant flush
-- `COMMON_WORDS` - Mots exclus du word count
-
----
-
-## 🛠️ Développement
-
-### Ajouter un nouveau cog
-
-1. Créer `bot/cogs/nom_du_cog.py` :
-```python
-from discord.ext import commands
-
-class NomDuCog(commands.Cog):
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
-    
-    @commands.command(name="commande")
-    async def ma_commande(self, ctx):
-        await ctx.send("Hello!")
-
-async def setup(bot: commands.Bot):
-    await bot.add_cog(NomDuCog(bot))
-```
-
-2. Charger dans `main.py` :
-```python
-await self.load_extension("bot.cogs.nom_du_cog")
-```
-
-### Ajouter une nouvelle donnée analytics
-
-1. Modifier `_create_empty_guild_stats()` dans `analytics.py`
-2. Ajouter la logique de collecte dans `on_message()` ou autre listener
-3. Incrémenter `CURRENT_SCHEMA_VERSION`
-4. Ajouter la migration dans `_migrate_if_needed()`
-
-### Structure d'un cog typique
-
-```python
-class ExempleCog(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
-        self.data = {}
-        self._load_data()
-        self.task.start()
-    
-    def _load_data(self):
-        # Charger depuis JSON
-        pass
-    
-    def _save_data(self):
-        # Sauvegarder vers JSON
-        pass
-    
-    @commands.Cog.listener()
-    async def on_message(self, message):
-        # Réagir aux messages
-        pass
-    
-    @commands.command(name="exemple")
-    async def exemple_cmd(self, ctx):
-        # Commande préfixée
-        pass
-    
-    @tasks.loop(minutes=5)
-    async def task(self):
-        # Tâche périodique
-        pass
-    
-    def cog_unload(self):
-        self.task.cancel()
-        self._save_data()
-```
-
----
-
-## 📊 Schéma de données
-
-### Versions du schéma analytics
-
-**v1 (actuel)** - Structure initiale :
-- `global_stats` avec toutes les métriques
-- Support multi-serveurs
-- Archive JSONL
-
-**Pour ajouter v2** :
-1. Incrémenter `CURRENT_SCHEMA_VERSION = 2`
-2. Ajouter dans `_migrate_if_needed()` :
-```python
-if current_version < 2:
-    for guild_id in self.data:
-        if guild_id.startswith("_"): continue
-        self.data[guild_id]["global_stats"]["nouveau_champ"] = default_value
-```
-3. Ajouter dans `_schema_history`
-
-### Algorithmes importants
-
-**Calcul du niveau** (`engagement.py`) :
 ```python
 def calculate_level(xp):
     level = 1
     while xp >= 100 * (level ** 1.5):
-        xp -= 100 * (level ** 1.5)
+        xp -= int(100 * (level ** 1.5))
         level += 1
     return level
 ```
 
-**Détection conversation** (`analytics.py`) :
-- Priorité aux réponses explicites (reply Discord)
-- Sinon, utilise le cache des derniers messages du canal
-- Si réponse < 5 minutes à quelqu'un d'autre = conversation
-- Clé : `"userA_userB"` (trié alphabétiquement)
+Les premiers niveaux sont rapides, puis ca ralentit progressivement.
 
-**Word count** :
-- Minuscules
-- Sans ponctuation
-- Exclut `COMMON_WORDS` (liste de mots courants)
-- Minimum 3 lettres
+### Streaks
+
+Le bot compte les jours consecutifs d'activite. La date de derniere activite est stockee par utilisateur — si l'ecart depasse un jour, le streak retombe a zero.
+
+### Classement hebdomadaire
+
+Chaque dimanche a 20h, le bot publie automatiquement le top du serveur dans le canal configure. L'XP hebdomadaire est ensuite remise a zero pour tout le monde.
 
 ---
 
-## 🔧 Dépannage
+## Analytics
 
-### Problèmes courants
+Le cog analytics collecte des donnees sur chaque message envoye, sans aucune commande necessaire.
 
-**Les commandes ne fonctionnent pas :**
-- Vérifier `DISCORD_TOKEN` dans `.env`
-- Vérifier les intents (message_content=True)
-- Voir logs : `sudo journalctl -u discord-bot -n 50`
+### Donnees collectees
 
-**Les données ne se sauvegardent pas :**
-- Vérifier permissions dossier `data/`
-- Vérifier espace disque
-- Voir erreurs dans les logs
+| Metrique | Detail |
+|---|---|
+| **Messages** | Total, par jour de la semaine (lun-dim), par heure (0-23), par tranche (nuit/matin/aprem/soir) |
+| **Mots** | Frequence des mots (min. 3 lettres, hors mots courants). Top 50, nettoye 1x/jour |
+| **Emojis** | Emojis texte utilises par chaque utilisateur |
+| **Conversations** | Graphe de qui repond a qui (replies Discord + heuristique < 5 min) |
+| **Mentions** | Graphe de qui mentionne qui (donne/recu) |
+| **Reactions** | Total et comptage par emoji |
+| **Archive** | Chaque message sauvegarde en JSONL : timestamp, auteur, contenu, mentions, reply, pieces jointes |
 
-**Le bot ne répond pas aux messages :**
-- Vérifier intents `message_content=True` dans `main.py`
-- Vérifier permissions du bot sur Discord (lire messages)
+### Schema (v1)
 
-**Reset des données :**
+Le fichier `data/analytics_v1.json` contient un objet `_meta` (version, dates) et un objet par guild avec toutes les stats dans `global_stats`. Le systeme supporte les migrations de schema : incrementer `CURRENT_SCHEMA_VERSION` dans `analytics.py` et ajouter la logique dans `_migrate_if_needed()`.
+
+L'archive `messages_archive_v1.jsonl` utilise le format JSON Lines (une ligne JSON par message) pour permettre l'append sans recharger tout le fichier.
+
+---
+
+## Configuration
+
+Toutes les constantes sont centralisees dans `bot/constants.py` :
+
+| Constante | Valeur | Role |
+|---|---|---|
+| `ENGAGEMENT_COOLDOWN_SECONDS` | 15 | Anti-spam XP |
+| `XP_PER_MESSAGE_MIN` / `MAX` | 8 / 8 | XP gagne par message |
+| `XP_GM_BONUS` | 50 | Bonus XP pour le GM |
+| `GM_RESET_TIME` | 05:30 | Heure de reset du GM quotidien |
+| `ENGAGEMENT_SAVE_INTERVAL_SECONDS` | 60 | Frequence sauvegarde engagement |
+| `ANALYTICS_SAVE_INTERVAL_MINUTES` | 5 | Frequence sauvegarde analytics |
+| `ANALYTICS_ARCHIVE_BUFFER_SIZE` | 100 | Taille du buffer avant flush archive |
+| `ANALYTICS_WORD_COUNT_TOP_N` | 50 | Nombre de mots conserves |
+
+Les canaux autorises pour les commandes sont aussi definis dans ce fichier (`COMMAND_CHANNEL_IDS_GENERAL_ONLY`, `COMMAND_CHANNEL_IDS_LUCID`).
+
+---
+
+## Etendre le bot
+
+### Ajouter un cog
+
+1. Creer `bot/cogs/mon_cog.py` en suivant le pattern des cogs existants (voir `lucid.py` pour un exemple simple, `engagement.py` pour un exemple complet)
+2. Ajouter `await self.load_extension("bot.cogs.mon_cog")` dans `main.py:setup_hook()`
+3. Mettre a jour `help.py` si le cog ajoute des commandes
+
+### Ajouter des donnees analytics
+
+1. Ajouter le champ dans `_create_empty_guild_stats()`
+2. Ajouter la logique de collecte dans le listener `on_message` ou `on_raw_reaction_add`
+3. Incrementer `CURRENT_SCHEMA_VERSION` et gerer la migration dans `_migrate_if_needed()`
+
+---
+
+## Deploiement (systemd)
+
 ```bash
-# Arrêter le bot
-sudo systemctl stop discord-bot
-
-# Supprimer les données
-rm data/analytics_v1.json
-rm data/messages_archive_v1.jsonl
-rm engagement_data.json
-rm gm_data.json
-
-# Relancer
+sudo cp discord-bot.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable discord-bot
 sudo systemctl start discord-bot
+
+# Consulter les logs
+sudo journalctl -u discord-bot -f
 ```
 
 ---
 
-## 📝 Notes pour IA / Maintenance
+## Depannage
 
-### Points d'extension courants
-
-1. **Nouvelles commandes** : Ajouter dans le cog approprié, mettre à jour `help.py`
-2. **Nouvelles données** : Modifier `analytics.py`, gérer migration
-3. **Nouveaux triggers** : Ajouter `@commands.Cog.listener()` dans cog approprié
-4. **Commandes slash** : Décommenter le code dans les cogs, sync dans `main.py`
-
-### Fichiers critiques
-- `bot/main.py` - Point d'entrée, chargement cogs
-- `bot/cogs/analytics.py` - Toute la collecte de données
-- `bot/cogs/engagement.py` - Système XP (dépend de analytics)
-- `data/analytics_v1.json` - Stats globales (ne pas supprimer sans backup)
-
-### Bonnes pratiques
-- Toujours sauvegarder JSON après modification
-- Utiliser `try/except` sur les appels Discord API
-- Logger les erreurs avec `print()` ou `logging`
-- Tester les migrations avec un fichier de test
-- Documenter les changements de schéma
+| Probleme | Solution |
+|---|---|
+| Les commandes ne repondent pas | Verifier `DISCORD_TOKEN` dans `.env` et l'intent `message_content` |
+| Donnees non sauvegardees | Verifier les permissions du dossier `data/` et l'espace disque |
+| Bot silencieux | Verifier les permissions Discord (lire/envoyer des messages) |
+| Reset complet des donnees | Arreter le bot, supprimer les fichiers JSON dans `data/` et a la racine, relancer |
 
 ---
 
-## 📄 Licence
+## Dependances
 
-Projet privé - Tous droits réservés.
+| Package | Version | Role |
+|---|---|---|
+| discord.py | >= 2.4.0 | Framework Discord |
+| python-dotenv | >= 1.0.0 | Lecture du `.env` |
+| pytz | >= 2024.1 | Timezone Europe/Paris |
 
 ---
 
-## 👤 Auteur
+Projet prive — Tous droits reserves.
 
-Créé avec ❤️ pour la communauté Onyx.
-
-**Dernière mise à jour** : Février 2026
+Cree pour la communaute Onyx. Derniere mise a jour : fevrier 2026.
