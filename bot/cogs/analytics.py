@@ -215,6 +215,7 @@ class AnalyticsCog(commands.Cog):
                     "afternoon": 0,
                     "evening": 0
                 },
+                "messages_by_segment_by_user": {},
                 "unique_users": [],  # Stocké comme liste pour JSON, mais on utilise des sets en mémoire
                 "unique_channels": [],
                 "word_counts": {},
@@ -299,6 +300,11 @@ class AnalyticsCog(commands.Cog):
             stats["messages_by_segment"] = {"night": 0, "morning": 0, "afternoon": 0, "evening": 0}
         segment = self._get_time_segment(now.hour)
         stats["messages_by_segment"][segment] = stats["messages_by_segment"].get(segment, 0) + 1
+        user_segments = stats.setdefault("messages_by_segment_by_user", {}).setdefault(
+            author_id,
+            {"night": 0, "morning": 0, "afternoon": 0, "evening": 0},
+        )
+        user_segments[segment] = user_segments.get(segment, 0) + 1
         
         # 2. Utilisateurs uniques (utilisation de set pour O(1))
         if author_id not in self._unique_users_cache[guild_id]:

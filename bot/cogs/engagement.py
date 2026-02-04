@@ -297,7 +297,7 @@ class EngagementCog(commands.Cog):
 
         emoji_usage = stats.get("emoji_text_usage", {}).get("users", {}).get(user_id_str, {})
         word_counts = stats.get("word_counts_by_user", {}).get(user_id_str, {})
-        segments = stats.get("messages_by_segment", {})
+        segments = stats.get("messages_by_segment_by_user", {}).get(user_id_str, {})
 
         return {
             "emoji_usage": emoji_usage,
