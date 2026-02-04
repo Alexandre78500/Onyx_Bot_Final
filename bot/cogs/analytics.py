@@ -28,33 +28,69 @@ ARCHIVE_BUFFER_SIZE = ANALYTICS_ARCHIVE_BUFFER_SIZE
 
 # Mots courants à exclure du word count
 COMMON_WORDS = {
-    "le", "la", "les", "un", "une", "des", "de", "du", "et", "ou", "mais",
-    "donc", "car", "ni", "que", "qui", "quoi", "dont", "où", "ce", "cet", "cette",
-    "ces", "mon", "ton", "son", "ma", "ta", "sa", "mes", "tes", "ses", "notre",
-    "votre", "leur", "nos", "vos", "leurs", "je", "tu", "il", "elle", "on", "nous",
-    "vous", "ils", "elles", "me", "te", "se", "lui", "soi", "en", "y", "à", "dans",
-    "par", "pour", "avec", "sans", "sur", "sous", "entre", "devant", "derrière",
-    "l", "d", "s", "n", "c", "j", "m", "t", "est", "ai", "as", "a", "avons", "avez",
-    "ont", "été", "être", "avoir", "faire", "plus", "moins", "très", "trop", "peu",
-    "bien", "mal", "oui", "non", "si", "pas", "ne", "au", "aux", "ça", "ca"
+    # Articles / déterminants
+    "le", "la", "les", "un", "une", "des", "de", "du", "au", "aux",
+    # Pronoms personnels / réfléchis
+    "je", "tu", "il", "elle", "on", "nous", "vous", "ils", "elles",
+    "me", "te", "se", "lui", "soi", "en", "y", "moi", "toi", "eux",
+    # Pronoms démonstratifs / relatifs / interrogatifs
+    "ce", "cet", "cette", "ces", "que", "qui", "quoi", "dont", "où",
+    # Possessifs
+    "mon", "ton", "son", "ma", "ta", "sa", "mes", "tes", "ses",
+    "notre", "votre", "leur", "nos", "vos", "leurs",
+    # Conjonctions
+    "et", "ou", "mais", "donc", "car", "ni", "puis", "sinon",
+    # Prépositions
+    "à", "dans", "par", "pour", "avec", "sans", "sur", "sous",
+    "entre", "devant", "derrière", "vers", "chez", "après", "avant",
+    "pendant", "depuis", "contre", "jusque",
+    # Adverbes courants
+    "plus", "moins", "très", "trop", "peu", "bien", "mal",
+    "aussi", "encore", "même", "tout", "tous", "toute", "toutes",
+    "rien", "jamais", "toujours", "alors", "comme", "quand", "comment",
+    "vraiment", "juste", "déjà", "assez", "tant", "tellement",
+    "là", "ici", "maintenant", "peut", "être",
+    # Verbes auxiliaires / très courants (conjugaisons)
+    "est", "ai", "as", "a", "avons", "avez", "ont", "été", "être", "avoir",
+    "faire", "fait", "fais", "dit", "dis", "suis", "était", "sont", "sera",
+    "vais", "vas", "aller", "peux", "peut", "veut", "veux", "faut", "doit",
+    "voit", "sait", "met", "mis",
+    # Négation / affirmation
+    "oui", "non", "si", "pas", "ne", "ça", "ca",
+    # Fragments d'élision
+    "l", "d", "s", "n", "c", "j", "m", "t", "qu",
+    # Argot / mots informels Discord
+    "mdr", "lol", "ptdr", "xd", "haha", "ahah", "hihi", "hehe",
+    "osef", "tkt", "stp", "svp", "btw", "omg", "jsp", "jpp",
+    "tmtc", "oklm", "fdp", "wtf", "imo", "afk", "gg", "wp",
 }
 
 CUSTOM_EMOJI_RE = re.compile(r"<a?:([A-Za-z0-9_]+):\d+>")
 SHORTCODE_EMOJI_RE = re.compile(r":([A-Za-z0-9_]+):")
 URL_RE = re.compile(r"https?://\S+")
+MENTION_RE = re.compile(r"<[@#][!&]?\d+>")
+REPEATED_CHAR_RE = re.compile(r"(.)\1{2,}")
 UNICODE_EMOJI_RE = re.compile(
     "["
-    "\U0001F300-\U0001F5FF"
-    "\U0001F600-\U0001F64F"
-    "\U0001F680-\U0001F6FF"
-    "\U0001F700-\U0001F77F"
-    "\U0001F780-\U0001F7FF"
-    "\U0001F800-\U0001F8FF"
-    "\U0001F900-\U0001F9FF"
-    "\U0001FA00-\U0001FA6F"
-    "\U0001FA70-\U0001FAFF"
-    "\U00002700-\U000027BF"
-    "\U00002600-\U000026FF"
+    "\U0001F300-\U0001F5FF"  # Misc Symbols and Pictographs
+    "\U0001F600-\U0001F64F"  # Emoticons
+    "\U0001F680-\U0001F6FF"  # Transport and Map
+    "\U0001F700-\U0001F77F"  # Alchemical Symbols
+    "\U0001F780-\U0001F7FF"  # Geometric Shapes Extended
+    "\U0001F800-\U0001F8FF"  # Supplemental Arrows-C
+    "\U0001F900-\U0001F9FF"  # Supplemental Symbols and Pictographs
+    "\U0001FA00-\U0001FA6F"  # Chess Symbols
+    "\U0001FA70-\U0001FAFF"  # Symbols and Pictographs Extended-A
+    "\U00002700-\U000027BF"  # Dingbats
+    "\U00002600-\U000026FF"  # Misc Symbols
+    "\U0001F1E0-\U0001F1FF"  # Drapeaux (Regional Indicators)
+    "\U0000FE00-\U0000FE0F"  # Variation Selectors
+    "\U0000200D"             # Zero Width Joiner
+    "\U00002300-\U000023FF"  # Misc Technical
+    "\U00002B50-\U00002B55"  # Stars
+    "\U000000A9"             # Copyright
+    "\U000000AE"             # Registered
+    "\U0000203C-\U00003299"  # Misc symbols CJK
     "]",
     re.UNICODE,
 )
@@ -275,9 +311,15 @@ class AnalyticsCog(commands.Cog):
             stats["unique_channels"].append(channel_id)
         
         # 4. Word count
-        if message.content and not message.content.startswith(("o!", "O!")):
+        if message.content and not message.content.startswith(("o!", "O!", "!", "?", ".", "/", "$", "~", "-", "+")):
             words = self._extract_words(message.content)
-            kept_words = [word for word in words if word not in COMMON_WORDS and len(word) >= 3]
+            kept_words = [
+                word for word in words
+                if word not in COMMON_WORDS
+                and len(word) >= 3
+                and not word.isdigit()
+                and not REPEATED_CHAR_RE.fullmatch(word)
+            ]
             if kept_words:
                 for word in kept_words:
                     stats["word_counts"][word] = stats["word_counts"].get(word, 0) + 1
@@ -340,14 +382,15 @@ class AnalyticsCog(commands.Cog):
         # Convertir en minuscules
         text = text.lower()
 
-        # Retirer liens et emojis
+        # Retirer liens, mentions et emojis
         text = URL_RE.sub(" ", text)
+        text = MENTION_RE.sub(" ", text)
         text = CUSTOM_EMOJI_RE.sub(" ", text)
         text = SHORTCODE_EMOJI_RE.sub(" ", text)
         text = UNICODE_EMOJI_RE.sub(" ", text)
         
         # Remplacer la ponctuation par des espaces
-        for char in ".,;:!?\"'()[]{}@#&-_=+/*$%":
+        for char in ".,;:!?\"'()[]{}@#&-_=+/*$%~`^|<>\\":
             text = text.replace(char, " ")
         
         # Split et filtrer
